@@ -1,5 +1,5 @@
 
-name: Extract StudyMind project
+name: Extraction automatique de StudyMind
 
 on:
   workflow_dispatch:
@@ -9,25 +9,51 @@ permissions:
 
 jobs:
   extract:
+    name: Extraire le projet Flutter
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
 
-      - name: Extract project
+      - name: Vérifier et extraire le ZIP
         run: |
-          mkdir -p /tmp/studymind
-          unzip -q StudyMind-Upload.zip.zip -d /tmp/studymind
-          PUBSPEC=$(find /tmp/studymind -name pubspec.yaml -print -quit)
-          test -n "$PUBSPEC"
-          SOURCE_DIR=$(dirname "$PUBSPEC")
-          cp -a "$SOURCE_DIR"/. .
-          rm -f StudyMind-Upload.zip.zip
+          set -euo pipefail
 
-      - name: Save extracted files
+          ARCHIVE="StudyMind-Upload.zip.zip"
+
+          if [ ! -f "$ARCHIVE" ]; then
+            echo "ERREUR : archive introuvable : $ARCHIVE"
+            exit 1
+          fi
+
+          mkdir -p /tmp/studymind
+          unzip -q "$ARCHIVE" -d /tmp/studymind
+
+          PUBSPEC=$(find /tmp/studymind -type f -name "pubspec.yaml" -print -quit)
+
+          if [ -z "$PUBSPEC" ]; then
+            echo "ERREUR : pubspec.yaml introuvable dans le ZIP"
+            exit 1
+          fi
+
+          SOURCE_DIR=$(dirname "$PUBSPEC")
+
+          cp -a "$SOURCE_DIR"/. .
+
+          rm -f "$ARCHIVE"
+
+      - name: Enregistrer les fichiers dans GitHub
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add -A
-          git diff --cached --quiet || git commit -m "Extract StudyMind project"
-          git push
+
+          if ! git diff --cached --quiet; then
+            git commit -m "Extraction du projet StudyMind"
+            git push
+          else
+            echo "Aucun changement à enregistrer"
+          fi
           
