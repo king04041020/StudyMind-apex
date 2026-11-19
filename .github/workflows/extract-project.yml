@@ -1,0 +1,33 @@
+
+name: Extract StudyMind project
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract project
+        run: |
+          mkdir -p /tmp/studymind
+          unzip -q StudyMind-Upload.zip.zip -d /tmp/studymind
+          PUBSPEC=$(find /tmp/studymind -name pubspec.yaml -print -quit)
+          test -n "$PUBSPEC"
+          SOURCE_DIR=$(dirname "$PUBSPEC")
+          cp -a "$SOURCE_DIR"/. .
+          rm -f StudyMind-Upload.zip.zip
+
+      - name: Save extracted files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "Extract StudyMind project"
+          git push
+          
