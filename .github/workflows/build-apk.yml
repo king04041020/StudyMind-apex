@@ -48,7 +48,7 @@ jobs:
         run: flutter pub get
 
       - name: Construire APK
-        run: flutter build apk --release
+        run: flutter build apk --release --no-tree-shake-icons
 
       - name: Publier le fichier APK
         uses: actions/upload-artifact@v4
