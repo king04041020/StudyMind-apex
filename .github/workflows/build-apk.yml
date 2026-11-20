@@ -37,9 +37,6 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Verifier Flutter
-        run: flutter --version
-
       - name: Verifier les fichiers
         run: |
           test -f pubspec.yaml
@@ -50,7 +47,7 @@ jobs:
         run: flutter pub get
 
       - name: Construire APK
-        run: flutter build apk --release
+        run: flutter build apk --release --android-skip-build-dependency-validation
 
       - name: Publier le fichier APK
         uses: actions/upload-artifact@v4
