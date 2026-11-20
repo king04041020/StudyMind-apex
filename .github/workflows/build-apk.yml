@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Recuperer le projet
+      - name: Recuperer le depot
         uses: actions/checkout@v4
 
       - name: Installer Java 17
@@ -31,9 +31,10 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Installer Flutter
+      - name: Installer Flutter 3.38.10
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: "3.38.10"
           channel: stable
           cache: true
 
@@ -47,7 +48,7 @@ jobs:
         run: flutter pub get
 
       - name: Construire APK
-        run: flutter build apk --release --android-skip-build-dependency-validation
+        run: flutter build apk --release
 
       - name: Publier le fichier APK
         uses: actions/upload-artifact@v4
