@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="21762" targetRuntime="iOS.CocoaTouch" useAutolayout="YES">
+    <device id="retina6_12" orientation="portrait" appearance="dark"/>
+    <dependencies><deployment identifier="iOS"/><plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="21754"/></dependencies>
+    <scenes><scene sceneID="MainScene"><objects>
+        <viewController id="FlutterViewController" customClass="FlutterViewController" customModule="Flutter" sceneMemberID="viewController">
+            <view key="view" contentMode="scaleToFill" id="FlutterView">
+                <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+            </view>
+        </viewController>
+        <placeholder placeholderIdentifier="IBFirstResponder" id="MainFirstResponder" sceneMemberID="firstResponder"/>
+    </objects></scene></scenes>
+</document>

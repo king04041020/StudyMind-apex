@@ -1,0 +1,9 @@
+StudyMind Apex — structure Flutter/Android
+
+- lib/main.dart : application Flutter
+- pubspec.yaml : dépendances Flutter
+- android/ : projet Android natif (Gradle Kotlin DSL, manifest, MainActivity Kotlin, ressources)
+- android/app/google-services.json : configuration Firebase Android
+
+Le workflow GitHub Actions utilise Flutter stable et régénère les fichiers de plateforme Flutter avant compilation.
+Le projet n'a pas encore été compilé dans cet environnement ; le premier lancement GitHub Actions servira à vérifier les dépendances et éventuelles erreurs de compilation.

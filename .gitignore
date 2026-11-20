@@ -1,0 +1,13 @@
+.dart_tool/
+.packages
+.pub-cache/
+build/
+functions/node_modules/
+functions/lib/
+android/local.properties
+android/key.properties
+*.jks
+*.keystore
+.env
+.env.*
+!functions/.env.example
