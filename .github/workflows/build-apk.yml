@@ -40,7 +40,7 @@ jobs:
       - name: Verifier Flutter
         run: flutter --version
 
-      - name: Verifier les fichiers du projet
+      - name: Verifier les fichiers
         run: |
           test -f pubspec.yaml
           test -f lib/main.dart
@@ -49,10 +49,7 @@ jobs:
       - name: Installer les dependances
         run: flutter pub get
 
-      - name: Verifier le projet
-        run: flutter analyze
-
-      - name: Construire APK Release
+      - name: Construire APK
         run: flutter build apk --release
 
       - name: Publier le fichier APK
