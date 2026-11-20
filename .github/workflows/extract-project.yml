@@ -1,59 +1,13 @@
 
-
 name: Extraction StudyMind
 
 on:
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  extract:
+  test:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Recuperer le depot
-        uses: actions/checkout@v4
-
-      - name: Extraire le projet Flutter
-        run: |
-          set -euo pipefail
-
-          ARCHIVE="StudyMind-Upload.zip.zip"
-
-          if [ ! -f "$ARCHIVE" ]; then
-            echo "Archive introuvable"
-            exit 1
-          fi
-
-          mkdir -p /tmp/studymind
-          unzip -q "$ARCHIVE" -d /tmp/studymind
-
-          PUBSPEC=$(find /tmp/studymind -type f -name pubspec.yaml -print -quit)
-
-          if [ -z "$PUBSPEC" ]; then
-            echo "ERREUR : pubspec.yaml introuvable"
-            exit 1
-          fi
-
-          SOURCE_DIR=$(dirname "$PUBSPEC")
-
-          find "$SOURCE_DIR" -mindepth 1 -maxdepth 1 ! -name ".github" -exec cp -a {} . \;
-
-          test -f pubspec.yaml
-          test -f lib/main.dart
-          test -d android
-          test -d ios
-
-          rm -f "$ARCHIVE"
-
-      - name: Enregistrer le projet
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add -A
-          git diff --cached --quiet || git commit -m "Extraction du projet StudyMind"
-          git push
-          
+      - name: Test GitHub Actions
+        run: echo "StudyMind workflow detected successfully"
+        
