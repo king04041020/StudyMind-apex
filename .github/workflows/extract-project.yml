@@ -1,4 +1,5 @@
 
+
 name: Extraction StudyMind
 
 on:
@@ -15,44 +16,44 @@ jobs:
       - name: Recuperer le depot
         uses: actions/checkout@v4
 
-      - name: Extraire le projet
+      - name: Extraire le projet Flutter
         run: |
-          set -e
+          set -euo pipefail
 
           ARCHIVE="StudyMind-Upload.zip.zip"
 
           if [ ! -f "$ARCHIVE" ]; then
-            echo "Archive introuvable : $ARCHIVE"
-            ls -la
+            echo "Archive introuvable"
             exit 1
           fi
 
           mkdir -p /tmp/studymind
           unzip -q "$ARCHIVE" -d /tmp/studymind
 
-          PUBSPEC=$(find /tmp/studymind -name pubspec.yaml -type f -print -quit)
+          PUBSPEC=$(find /tmp/studymind -type f -name pubspec.yaml -print -quit)
 
           if [ -z "$PUBSPEC" ]; then
-            echo "pubspec.yaml introuvable"
+            echo "ERREUR : pubspec.yaml introuvable"
             exit 1
           fi
 
           SOURCE_DIR=$(dirname "$PUBSPEC")
-          cp -a "$SOURCE_DIR"/. .
 
-          rm -f "$ARCHIVE"
+          find "$SOURCE_DIR" -mindepth 1 -maxdepth 1 ! -name ".github" -exec cp -a {} . \;
 
           test -f pubspec.yaml
           test -f lib/main.dart
+          test -d android
+          test -d ios
 
-      - name: Enregistrer dans GitHub
+          rm -f "$ARCHIVE"
+
+      - name: Enregistrer le projet
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
 
-          if ! git diff --cached --quiet; then
-            git commit -m "Extraction du projet StudyMind"
-            git push
-          fi
+          git add -A
+          git diff --cached --quiet || git commit -m "Extraction du projet StudyMind"
+          git push
           
