@@ -2,12 +2,15 @@
 name: Extraction StudyMind
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Test GitHub Actions
-        run: echo "StudyMind workflow detected successfully"
+      - name: Tester GitHub Actions
+        run: echo "StudyMind Actions fonctionne"
         
