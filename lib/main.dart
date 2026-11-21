@@ -35,6 +35,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
   bool _dailyQuestDone = false;
   String _dailyQuestDate = '';
   bool _loading = true;
+  bool _localDataLoaded = false;
   String? _cloudUid;
 
   Set<String> _completedExercises = {};
@@ -95,13 +96,14 @@ class _StudyMindAppState extends State<StudyMindApp> {
       _questCycle = prefs.getString('questCycle') ?? '';
       _loading = false;
     });
+    _localDataLoaded = true;
     await prefs.setString('dailyQuestDate', todayKey);
     if (savedDailyDate != todayKey) await prefs.setBool('dailyQuestDone', false);
   }
 
   Future<void> _syncCloudCourses() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null || _cloudUid == user.uid) return;
+    if (user == null || !_localDataLoaded || _cloudUid == user.uid) return;
     _cloudUid = user.uid;
     try {
       final ref = FirebaseFirestore.instance.collection('users').doc(user.uid).collection('appData').doc('main');
@@ -923,9 +925,19 @@ class _ExercisePageState extends State<ExercisePage> {
       headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
       body: jsonEncode({'task': task, 'course': widget.course.name, 'text': widget.course.content, 'answer': answer, 'difficulty': _difficulty}),
     ).timeout(const Duration(seconds: 90));
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    if (response.statusCode < 200 || response.statusCode >= 300) throw Exception(data['error']?.toString() ?? 'Erreur IA (${response.statusCode})');
-    return data['content']?.toString() ?? '';
+    Map<String, dynamic> data;
+    try {
+      final decoded = jsonDecode(response.body);
+      data = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+    } catch (_) {
+      throw Exception('Réponse IA illisible (HTTP ${response.statusCode}).');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(data['error']?.toString() ?? 'Service IA indisponible (HTTP ${response.statusCode}).');
+    }
+    final content = data['content']?.toString() ?? '';
+    if (content.trim().isEmpty) throw Exception('Le service IA n’a renvoyé aucun exercice.');
+    return content;
   }
 
   Future<void> _saveGeneratedExercise(String content) async {
@@ -1684,8 +1696,16 @@ class _AssistantChatPageState extends State<AssistantChatPage> {
       final response = await http.post(Uri.parse('$workerUrl/api/chat'),
         headers: {'Content-Type':'application/json','Authorization':'Bearer $token'},
         body: jsonEncode({'message':question,'mode':widget.mode,'style':widget.style,'course':widget.course,'assistantName':widget.assistantName,'context':widget.courseContext})).timeout(const Duration(seconds: 45));
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode < 200 || response.statusCode >= 300) throw Exception(data['error']?.toString() ?? 'Erreur Worker (${response.statusCode})');
+      Map<String, dynamic> data;
+      try {
+        final decoded = jsonDecode(response.body);
+        data = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+      } catch (_) {
+        throw Exception('Réponse du serveur illisible (HTTP ${response.statusCode}).');
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(data['error']?.toString() ?? 'Service IA indisponible (HTTP ${response.statusCode}).');
+      }
       final answer = data['answer']?.toString() ?? '';
       if (answer.isEmpty) throw Exception('Gemini a renvoyé une réponse vide.');
       if (mounted) setState(() => _messages.add({'role':'assistant','text':answer}));
