@@ -2,12 +2,6 @@ name: Test StudyMind AI end-to-end
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/test-ai-integration.yml"
-      - "worker.js"
   workflow_run:
     workflows:
       - Deploy StudyMind AI Worker
@@ -64,7 +58,7 @@ jobs:
           fi
           ANSWER="$(jq -r '.answer // empty' <<< "$RESPONSE")"
           test -n "$ANSWER"
-          echo "CHAT_OK: Gemini returned a non-empty answer."
+          echo "CHAT_OK: Gemini returned a non-empty answer (model: $(jq -r '.model // "unknown"' <<< "$RESPONSE"))."
 
       - name: Test revision sheet generation
         env:
@@ -77,7 +71,7 @@ jobs:
             -d "$BODY" 'https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate')"
           CONTENT="$(jq -r '.content // empty' <<< "$RESPONSE")"
           test "${#CONTENT}" -gt 80
-          echo "REVISION_OK: non-empty study sheet generated."
+          echo "REVISION_OK: non-empty study sheet generated (model: $(jq -r '.model // "unknown"' <<< "$RESPONSE"))."
 
       - name: Test new exercise generation
         env:
@@ -90,7 +84,7 @@ jobs:
             -d "$BODY" 'https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate')"
           CONTENT="$(jq -r '.content // empty' <<< "$RESPONSE")"
           test "${#CONTENT}" -gt 80
-          echo "EXERCISE_OK: non-empty exercise generated."
+          echo "EXERCISE_OK: non-empty exercise generated (model: $(jq -r '.model // "unknown"' <<< "$RESPONSE"))."
 
       - name: Test exercise correction
         env:
@@ -103,7 +97,7 @@ jobs:
             -d "$BODY" 'https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate')"
           CONTENT="$(jq -r '.content // empty' <<< "$RESPONSE")"
           test "${#CONTENT}" -gt 80
-          echo "CORRECTION_OK: non-empty correction generated."
+          echo "CORRECTION_OK: non-empty correction generated (model: $(jq -r '.model // "unknown"' <<< "$RESPONSE"))."
  
       - name: Delete temporary Firebase test account
         if: always() && steps.auth.outputs.id_token != ''
