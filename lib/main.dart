@@ -303,6 +303,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
                       onExercise: _openExercise,
                       onImport: _importCourse,
                       onSummary: _showSummary,
+                      onArchive: () => _navigatorKey.currentState!.push(MaterialPageRoute(builder: (_) => const StudyArtifactArchivePage())),
                     ),
                     _QuestsPage(
                       onAward: _award, dailyDone: _dailyQuestDone, secretDone: _secretQuestDone,
@@ -819,6 +820,7 @@ class _CoursesPage extends StatelessWidget {
     required this.onExercise,
     required this.onImport,
     required this.onSummary,
+    required this.onArchive,
   });
 
   final List<Course> courses;
@@ -826,6 +828,7 @@ class _CoursesPage extends StatelessWidget {
   final void Function(Course) onExercise;
   final VoidCallback onImport;
   final void Function(Course) onSummary;
+  final VoidCallback onArchive;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -843,6 +846,12 @@ class _CoursesPage extends StatelessWidget {
             onPressed: onImport,
             icon: const Icon(Icons.upload_file),
             label: const Text('Importer un cours (PDF, TXT, MD)'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: onArchive,
+            icon: const Icon(Icons.inventory_2_outlined),
+            label: const Text('Mes fiches et exercices enregistrés'),
           ),
           const SizedBox(height: 14),
           ...courses.map(
@@ -892,6 +901,49 @@ class _CoursesPage extends StatelessWidget {
           ),
         ],
       );
+}
+
+
+class StudyArtifactArchivePage extends StatelessWidget {
+  const StudyArtifactArchivePage({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const Scaffold(body: Center(child: Text('Connecte-toi pour consulter tes documents.')));
+    final stream = FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts').orderBy('createdAt', descending: true).snapshots();
+    return Scaffold(
+      appBar: AppBar(title: const Text('MES DOCUMENTS ENREGISTRÉS')),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: stream,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) return Center(child: Text('Chargement impossible : \${snapshot.error}'));
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          final docs = snapshot.data!.docs;
+          if (docs.isEmpty) return const Center(child: Text('Aucune fiche ou aucun exercice enregistré pour le moment.'));
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: docs.length,
+            itemBuilder: (context, index) {
+              final data = docs[index].data();
+              final revision = data['type'] == 'revision';
+              final title = '\${revision ? 'Fiche de révision' : 'Exercice'} • \${data['course'] ?? 'Cours'}';
+              return Card(child: ListTile(
+                leading: Icon(revision ? Icons.summarize_outlined : Icons.assignment_outlined, color: systemBlue),
+                title: Text(title),
+                subtitle: Text(data['createdAt'] is Timestamp ? (data['createdAt'] as Timestamp).toDate().toLocal().toString().substring(0, 16) : 'Enregistré'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => showDialog(context: context, builder: (dialogContext) => AlertDialog(
+                  title: Text(title),
+                  content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: SelectableText(data['content']?.toString() ?? 'Contenu indisponible.'))),
+                  actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Fermer'))],
+                )),
+              ));
+            },
+          );
+        },
+      ),
+    );
+  }
 }
 
 class ExercisePage extends StatefulWidget {
@@ -963,7 +1015,17 @@ class _ExercisePageState extends State<ExercisePage> {
   }
   Future<void> _generateAiExercise() async {
     if (_aiBusy) return;
-    setState(() { _aiBusy = true; _feedback = ''; });
+    if (widget.course.content.trim().length < 20) {
+      setState(() => _feedback = 'Ajoute le contenu du cours pour générer un exercice personnalisé.');
+      return;
+    }
+    setState(() {
+      _aiBusy = true;
+      _feedback = 'KING prépare un nouvel exercice…';
+      _generatedQuestion = null;
+      _answer.clear();
+      _submitted = false;
+    });
     try {
       final generated = await _callStudyAi('exercise');
       // Ne pas perdre l'exercice généré si l'archivage Firestore échoue.
@@ -1720,7 +1782,47 @@ class _AssistantChatPageState extends State<AssistantChatPage> {
   final _controller = TextEditingController();
   final List<Map<String, String>> _messages = [];
   bool _sending = false;
+  bool _loadingHistory = true;
   String? _error;
+
+  CollectionReference<Map<String, dynamic>>? get _chatMessages {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return null;
+    return FirebaseFirestore.instance.collection('users').doc(uid).collection('assistantChats').doc('main').collection('messages');
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final ref = _chatMessages;
+      if (ref == null) return;
+      final snapshot = await ref.orderBy('createdAt').get();
+      if (!mounted) return;
+      setState(() {
+        _messages..clear()..addAll(snapshot.docs.map((doc) => {
+          'role': doc.data()['role']?.toString() ?? 'assistant',
+          'text': doc.data()['text']?.toString() ?? '',
+        }));
+      });
+    } catch (error) {
+      debugPrint('StudyMind chat history load failed: $error');
+      if (mounted) setState(() => _error = 'Historique non chargé : vérifie ta connexion.');
+    } finally {
+      if (mounted) setState(() => _loadingHistory = false);
+    }
+  }
+
+  Future<void> _saveChatMessage(String role, String text) async {
+    final ref = _chatMessages;
+    if (ref == null) throw Exception('Connecte-toi pour sauvegarder cette conversation.');
+    await ref.add({'role': role, 'text': text, 'createdAt': FieldValue.serverTimestamp()});
+  }
+
   Future<void> _send() async {
     final question = _controller.text.trim();
     if (question.isEmpty || _sending) return;
@@ -1729,6 +1831,7 @@ class _AssistantChatPageState extends State<AssistantChatPage> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('Connecte-toi à ton compte Firebase.');
+      await _saveChatMessage('user', question);
       final token = await user.getIdToken(true);
       final response = await http.post(Uri.parse('$workerUrl/api/chat'),
         headers: {'Content-Type':'application/json','Authorization':'Bearer $token'},
@@ -1745,6 +1848,7 @@ class _AssistantChatPageState extends State<AssistantChatPage> {
       }
       final answer = data['answer']?.toString() ?? '';
       if (answer.isEmpty) throw Exception('Gemini a renvoyé une réponse vide.');
+      await _saveChatMessage('assistant', answer);
       if (mounted) setState(() => _messages.add({'role':'assistant','text':answer}));
     } catch (e) { if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ','')); }
     if (mounted) setState(() => _sending = false);
