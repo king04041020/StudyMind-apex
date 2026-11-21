@@ -30,13 +30,14 @@ jobs:
         run: |
           set -euo pipefail
           API_KEY="$(jq -r '.client[0].api_key[0].current_key' android/app/google-services.json)"
-          RESPONSE="$(curl --fail-with-body --silent --show-error \
+          HTTP_CODE="$(curl --silent --show-error -o /tmp/firebase-auth.json -w '%{http_code}' \
             -H 'Content-Type: application/json' \
             -d '{"returnSecureToken":true}' \
             "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${API_KEY}")"
+          RESPONSE="$(cat /tmp/firebase-auth.json)"
           TOKEN="$(jq -r '.idToken // empty' <<< "$RESPONSE")"
           if [ -z "$TOKEN" ]; then
-            echo "Firebase anonymous sign-in did not return an ID token."
+            echo "Firebase anonymous sign-in refused the CI test account (HTTP $HTTP_CODE)."
             jq '{error: .error.message}' <<< "$RESPONSE"
             exit 1
           fi
