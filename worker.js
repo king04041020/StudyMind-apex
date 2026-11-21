@@ -82,7 +82,7 @@ export default {
           ? `Matière: ${course}\nCours:\n${source}\nRéponse de l'élève:\n${answer}\n\nTâche: ${prompt}`
           : `Matière: ${course}\nDifficulté: ${difficulty}\nCours:\n${source}\n\nTâche: ${prompt}`;
         const generated = await fetch(
-          "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
           { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": geminiApiKey },
             body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: userPrompt }] }], generationConfig: { temperature: 0.45, maxOutputTokens: 3000 } }) }
         );
@@ -119,7 +119,7 @@ export default {
       const styleInstruction = styleInstructions[style] || styleInstructions["Mentor"];
       const systemInstruction = `${identities[mode]}\nStyle de personnalité : ${styleInstruction}\nTu travailles dans StudyMind, une application d'apprentissage. Explique avec précision, adapte ton niveau à l'élève et privilégie les exemples. Ne prétends pas connaître un cours qui ne t'a pas été fourni.\nMatière : ${course || "Non précisée"}.\nContenu du cours fourni :\n${context || "Aucun document de cours fourni."}`;
       const aiResponse = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
         { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": geminiApiKey },
           body: JSON.stringify({ systemInstruction: { parts: [{ text: systemInstruction }] }, contents: [{ role: "user", parts: [{ text: message }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } }) }
       );
