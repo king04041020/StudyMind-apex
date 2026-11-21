@@ -87,7 +87,7 @@ export default {
           console.error("StudyMind Gemini generation error", generated.status, detail);
           return respond({ error: `Gemini (HTTP ${generated.status}) : ${String(detail).slice(0, 700)}` }, 502);
         }
-        const content = generatedData.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("\\n").trim();
+        const content = generatedData.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("\n").trim();
         if (!content) return respond({ error: "Gemini n'a renvoyé aucun contenu." }, 502);
         return respond({ content });
       }
