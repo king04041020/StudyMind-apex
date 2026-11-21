@@ -41,11 +41,8 @@ class _StudyMindAppState extends State<StudyMindApp> {
   String _assistantIdentity = 'KING';
   String _customAssistantName = 'Mon assistant';
 
-  List<Course> _courses = [
-    Course(name: 'Comptabilité générale', detail: 'SYSCOHADA • 4 chapitres', icon: Icons.calculate_outlined),
-    Course(name: 'Mathématiques', detail: 'Algèbre • Fonctions', icon: Icons.functions),
-    Course(name: 'Histoire', detail: 'Histoire contemporaine', icon: Icons.account_balance_outlined),
-  ];
+  // Aucune matière prédéfinie : la bibliothèque démarre vide.
+  List<Course> _courses = [];
 
   @override
   void initState() {
@@ -68,6 +65,12 @@ class _StudyMindAppState extends State<StudyMindApp> {
         final decoded = jsonDecode(savedCourses) as List<dynamic>;
         loadedCourses = decoded
             .map((item) => Course.fromJson(item as Map<String, dynamic>))
+            // Nettoie aussi les anciennes matières de démonstration déjà enregistrées.
+            .where((course) => !{
+              'Comptabilité générale',
+              'Mathématiques',
+              'Histoire',
+            }.contains(course.name.trim()))
             .toList();
       } catch (_) {
         loadedCourses = _courses;
@@ -92,6 +95,11 @@ class _StudyMindAppState extends State<StudyMindApp> {
       _courses = loadedCourses;
       _loading = false;
     });
+    // Persiste le nettoyage pour que les anciennes matières par défaut ne réapparaissent pas.
+    await prefs.setString(
+      'courses',
+      jsonEncode(loadedCourses.map((course) => course.toJson()).toList()),
+    );
     await prefs.setString('dailyQuestDate', todayKey);
     if (savedDailyDate != todayKey) await prefs.setBool('dailyQuestDone', false);
   }
