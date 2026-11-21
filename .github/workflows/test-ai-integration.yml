@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - ".github/workflows/test-ai-integration.yml"
+      - "worker.js"
   workflow_run:
     workflows:
       - Deploy StudyMind AI Worker
