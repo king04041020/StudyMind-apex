@@ -964,8 +964,10 @@ class _ExercisePageState extends State<ExercisePage> {
     setState(() { _aiBusy = true; _feedback = ''; });
     try {
       final generated = await _callStudyAi('exercise');
-      await _saveGeneratedExercise(generated);
-      final marker = RegExp(r'(?im)^\s*(?:#+\s*)?CORRECTION\s*:?').firstMatch(generated);
+      // Ne pas perdre l'exercice généré si l'archivage Firestore échoue.
+      try { await _saveGeneratedExercise(generated); }
+      catch (saveError) { debugPrint('StudyMind exercice non archivé : $saveError'); }
+      final marker = RegExp(r'(?im)^\s*(?:#+\s*)?CORRECTION(?:\s+DÉTAILLÉE)?\s*:?').firstMatch(generated);
       final question = marker == null ? generated : generated.substring(0, marker.start).trim();
       if (mounted && question.isNotEmpty) setState(() { _generatedQuestion = question; });
     } catch (error) {
