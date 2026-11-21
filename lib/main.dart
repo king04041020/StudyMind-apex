@@ -600,12 +600,12 @@ class _Dashboard extends StatelessWidget {
 
 int _previousThreshold(int points) {
   if (points >= 5000) return 5000;
-  if (points >= 6000) return 6000;
   if (points >= 3000) return 3000;
   if (points >= 1500) return 1500;
-  if (points >= 700) return 700;
-  if (points >= 300) return 300;
-  if (points >= 100) return 100;
+  if (points >= 750) return 750;
+  if (points >= 350) return 350;
+  if (points >= 150) return 150;
+  if (points >= 50) return 50;
   return 0;
 }
 
@@ -1080,106 +1080,6 @@ void _showSecret(BuildContext context, VoidCallback onComplete) {
   ).then((_) => answerController.dispose());
 }
 
-class _AdministrationPage extends StatelessWidget {
-  const _AdministrationPage();
-
-  static const List<Map<String, String>> _modules = [
-    {
-      'title': 'Module 1 — Identité et valeurs',
-      'detail': 'Mission de StudyMind, charte, neutralité, respect et responsabilités.'
-    },
-    {
-      'title': 'Module 2 — Gestion des utilisateurs',
-      'detail': 'Assistance, signalements, protection des comptes et traitement équitable.'
-    },
-    {
-      'title': 'Module 3 — Gestion pédagogique',
-      'detail': 'Qualité des cours, exercices, résumés et signalement des erreurs.'
-    },
-    {
-      'title': 'Module 4 — Sécurité et confidentialité',
-      'detail': 'Données personnelles, accès minimum nécessaire, mots de passe et incidents.'
-    },
-    {
-      'title': 'Module 5 — Outils administratifs',
-      'detail': 'Permissions, journal d’activité, modération et procédures d’escalade.'
-    },
-    {
-      'title': 'Module 6 — Cas pratiques',
-      'detail': 'Résoudre des situations réelles sans abuser de ses pouvoirs.'
-    },
-  ];
-
-  Widget _lockedTool(IconData icon, String title, String detail) => Card(
-        child: ListTile(
-          leading: Icon(icon, color: systemBlue),
-          title: Text(title),
-          subtitle: Text(detail),
-          trailing: const Icon(Icons.lock_outline, size: 18),
-        ),
-      );
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('STUDYMIND • ADMINISTRATION')),
-        body: ListView(
-          padding: const EdgeInsets.all(18),
-          children: [
-            _panel(
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.workspace_premium_outlined, color: systemBlue, size: 38),
-                  SizedBox(height: 10),
-                  Text('STUDYMIND ACADEMY', style: TextStyle(color: systemBlue, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
-                  SizedBox(height: 6),
-                  Text('Programme officiel de formation des administrateurs'),
-                  SizedBox(height: 10),
-                  Text('ÉTAT : APERÇU — ACTIVATION SÉCURISÉE À EFFECTUER', style: TextStyle(color: Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 18),
-            _sectionTitle('PARCOURS OBLIGATOIRE'),
-            const Text('Chaque candidat doit terminer les six modules avant de passer l’examen.'),
-            const SizedBox(height: 8),
-            ..._modules.map((module) => Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.menu_book_outlined, color: systemBlue),
-                    title: Text(module['title']!),
-                    subtitle: Text(module['detail']!),
-                  ),
-                )),
-            const SizedBox(height: 14),
-            _sectionTitle('VALIDATION DES CANDIDATS'),
-            _lockedTool(Icons.quiz_outlined, 'Examen final', 'Questionnaire noté après la formation ; seuil de réussite configurable.'),
-            _lockedTool(Icons.record_voice_over_outlined, 'Entretien avec la fondatrice', 'Évaluation personnelle de la motivation, du jugement et du sérieux.'),
-            _lockedTool(Icons.verified_user_outlined, 'Approbation de la fondatrice', 'Aucune nomination automatique : chaque candidature attend ta décision.'),
-            const SizedBox(height: 14),
-            _sectionTitle('OUTILS DE SÉCURITÉ PRÉVUS'),
-            _lockedTool(Icons.vpn_key_outlined, 'Codes de nomination', 'Codes générés côté serveur, à usage unique, temporaires et révocables.'),
-            _lockedTool(Icons.admin_panel_settings_outlined, 'Permissions par rôle', 'Droits limités au strict nécessaire ; aucun droit de nommer d’autres admins.'),
-            _lockedTool(Icons.history, 'Journal d’activité', 'Historique horodaté des actions administratives et des changements de droits.'),
-            _lockedTool(Icons.person_remove_alt_1_outlined, 'Révocation immédiate', 'Désactivation des accès et des sessions d’un administrateur.'),
-            _lockedTool(Icons.phonelink_lock_outlined, 'Protection du compte fondateur', 'Authentification renforcée et protection contre toute rétrogradation.'),
-            const SizedBox(height: 14),
-            _panel(
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('RÈGLE FONDAMENTALE', style: TextStyle(color: systemBlue, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8),
-                  Text('Seule la fondatrice peut approuver une nomination. Les administrateurs ne peuvent ni créer d’autres administrateurs, ni modifier le rôle de la fondatrice.'),
-                  SizedBox(height: 10),
-                  Text('Sécurité : ces contrôles devront être appliqués par un serveur et une authentification vérifiée. Un écran Flutter ou un code caché dans l’APK ne suffit pas à protéger les privilèges.', style: TextStyle(color: Colors.orangeAccent, height: 1.4)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-}
-
 class _ProfilePage extends StatelessWidget {
   const _ProfilePage({
     required this.points,
@@ -1231,17 +1131,6 @@ class _ProfilePage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.admin_panel_settings_outlined, color: systemBlue),
-              title: const Text('Administration StudyMind'),
-              subtitle: const Text('Fondateur • Academy • Sécurité'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const _AdministrationPage()),
-              ),
-            ),
-          ),
           Card(
             child: ListTile(
               leading: const Icon(
