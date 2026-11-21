@@ -7,6 +7,7 @@ import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -34,6 +35,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
   bool _dailyQuestDone = false;
   String _dailyQuestDate = '';
   bool _loading = true;
+  String? _cloudUid;
 
   Set<String> _completedExercises = {};
   String _assistantName = 'KING';
@@ -96,6 +98,49 @@ class _StudyMindAppState extends State<StudyMindApp> {
     if (savedDailyDate != todayKey) await prefs.setBool('dailyQuestDone', false);
   }
 
+  Future<void> _syncCloudCourses() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || _cloudUid == user.uid) return;
+    _cloudUid = user.uid;
+    try {
+      final ref = FirebaseFirestore.instance.collection('users').doc(user.uid).collection('appData').doc('main');
+      final snapshot = await ref.get();
+      final cloudCourses = snapshot.data()?['courses'];
+      if (cloudCourses is List && cloudCourses.isNotEmpty) {
+        final restored = cloudCourses.whereType<Map>().map((item) => Course.fromJson(Map<String, dynamic>.from(item))).toList();
+        if (mounted && restored.isNotEmpty) {
+          setState(() => _courses = restored);
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('courses', jsonEncode(_courses.map((c) => c.toJson()).toList()));
+        }
+      } else {
+        await ref.set({'courses': _courses.map((c) => c.toJson()).toList(), 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
+      }
+    } catch (error) { _cloudUid = null; debugPrint('StudyMind cloud sync failed: $error'); }
+  }
+
+  Future<void> _saveStudyArtifact(String type, Course course, String content) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('Connexion Firebase requise pour enregistrer.');
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts').add({
+      'type': type, 'course': course.name, 'content': content, 'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+  Future<String> _generateStudyContent({required String task, required Course course, String answer = '', String difficulty = 'Moyen'}) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('Connecte-toi à ton compte Firebase.');
+    if (course.content.trim().length < 20) throw Exception('Ajoute le contenu du cours avant de générer une fiche ou un exercice.');
+    final token = await user.getIdToken(true);
+    final response = await http.post(Uri.parse('https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate'),
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      body: jsonEncode({'task': task, 'course': course.name, 'text': course.content, 'answer': answer, 'difficulty': difficulty}),
+    ).timeout(const Duration(seconds: 90));
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode < 200 || response.statusCode >= 300) throw Exception(data['error']?.toString() ?? 'Erreur IA (${response.statusCode})');
+    final content = data['content']?.toString() ?? '';
+    if (content.isEmpty) throw Exception('L’IA n’a renvoyé aucun contenu.');
+    return content;
+  }
   Future<void> _saveData() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('points', _points);
@@ -112,6 +157,15 @@ class _StudyMindAppState extends State<StudyMindApp> {
       'courses',
       jsonEncode(_courses.map((course) => course.toJson()).toList()),
     );
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('appData').doc('main').set({
+          'courses': _courses.map((course) => course.toJson()).toList(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (error) { debugPrint('StudyMind cloud save failed: $error'); }
+    }
   }
 
   String get _rank {
@@ -150,6 +204,8 @@ class _StudyMindAppState extends State<StudyMindApp> {
 
   @override
   Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null && _cloudUid != uid) { Future.microtask(_syncCloudCourses); }
     final scheme = ColorScheme.fromSeed(
       seedColor: systemBlue,
       brightness: Brightness.dark,
@@ -169,7 +225,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
           elevation: 0,
         ),
       ),
-      home: AuthGate(child: Scaffold(
+      home: AuthGate(onAuthenticated: _syncCloudCourses, child: Scaffold(
         body: SafeArea(
           child: _loading
               ? const Center(
@@ -265,48 +321,34 @@ class _StudyMindAppState extends State<StudyMindApp> {
   }
 
   void _addCourse() {
-    final controller = TextEditingController();
+    final nameController = TextEditingController();
+    final contentController = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Ajouter une matière'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Nom de la matière',
-            hintText: 'Ex. : Comptabilité générale',
-          ),
-        ),
+        title: const Text('Créer une matière'),
+        content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: nameController, autofocus: true, decoration: const InputDecoration(labelText: 'Nom de la matière', hintText: 'Ex. : Comptabilité générale')),
+          const SizedBox(height: 12),
+          TextField(controller: contentController, minLines: 3, maxLines: 7, decoration: const InputDecoration(labelText: 'Contenu du cours (facultatif)', hintText: 'Colle ici ton cours pour permettre à KING de créer des fiches et exercices IA.', border: OutlineInputBorder())),
+        ]))),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
           FilledButton(
             onPressed: () {
-              final name = controller.text.trim();
-              if (name.isNotEmpty) {
-                setState(() {
-                  _courses.add(
-                    Course(
-                      name: name,
-                      detail: 'Nouvel espace de cours',
-                      icon: Icons.auto_stories,
-                    ),
-                  );
-                });
-                _saveData();
-              }
+              final name = nameController.text.trim();
+              if (name.isEmpty) return;
+              final content = contentController.text.trim();
+              setState(() => _courses.add(Course(name: name, detail: content.isEmpty ? 'Nouvel espace de cours' : 'Cours ajouté • ${content.length} caractères', icon: Icons.auto_stories, content: content)));
+              _saveData();
               Navigator.pop(ctx);
             },
             child: const Text('Créer'),
           ),
         ],
       ),
-    );
+    ).then((_) { nameController.dispose(); contentController.dispose(); });
   }
-
   Future<void> _importCourse() async {
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -351,24 +393,24 @@ class _StudyMindAppState extends State<StudyMindApp> {
     }
   }
 
-  void _showSummary(Course course) {
-    final text = course.content.trim();
-    if (text.isEmpty) {
-      _comingSoon(context, 'Ajoute d’abord un document texte ou PDF à cette matière pour créer une fiche.');
+  Future<void> _showSummary(Course course) async {
+    if (course.content.trim().length < 20) {
+      _comingSoon(context, 'Ajoute le contenu de cette matière avec Importer un cours pour créer une fiche IA.');
       return;
     }
-    final sentences = text.split(RegExp(r'(?<=[.!?])\s+')).where((s) => s.trim().length > 35).toList();
-    final summary = sentences.take(8).join('\n\n');
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Fiche de révision • ${course.name}'),
-        content: SingleChildScrollView(child: SelectableText(summary.isEmpty ? text.substring(0, text.length > 1800 ? 1800 : text.length) : summary)),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fermer'))],
-      ),
-    );
+    showDialog(context: context, barrierDismissible: false, builder: (ctx) => const AlertDialog(content: Row(children: [CircularProgressIndicator(), SizedBox(width: 16), Expanded(child: Text('KING prépare ta fiche de révision…'))])));
+    try {
+      final generated = await _generateStudyContent(task: 'revision', course: course);
+      await _saveStudyArtifact('revision', course, generated);
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      showDialog(context: context, builder: (ctx) => AlertDialog(title: Text('Fiche IA • ${course.name}'), content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: SelectableText(generated))), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fermer'))]));
+    } catch (error) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Création de fiche impossible : $error')));
+    }
   }
-
   void _openExercise(Course course) {
     final exerciseId = course.name;
     Navigator.push(
@@ -706,6 +748,49 @@ class _ExercisePageState extends State<ExercisePage> {
   late bool _submitted = widget.alreadySubmitted;
   final TextEditingController _answer = TextEditingController();
   String _feedback = '';
+  String? _generatedQuestion;
+  bool _aiBusy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.course.content.trim().length >= 20) _generateAiExercise();
+  }
+
+  Future<String> _callStudyAi(String task, {String answer = ''}) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('Connexion Firebase requise.');
+    final token = await user.getIdToken(true);
+    final response = await http.post(
+      Uri.parse('https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate'),
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      body: jsonEncode({'task': task, 'course': widget.course.name, 'text': widget.course.content, 'answer': answer, 'difficulty': _difficulty}),
+    ).timeout(const Duration(seconds: 90));
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode < 200 || response.statusCode >= 300) throw Exception(data['error']?.toString() ?? 'Erreur IA (${response.statusCode})');
+    return data['content']?.toString() ?? '';
+  }
+
+  Future<void> _saveGeneratedExercise(String content) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('Connexion Firebase requise pour enregistrer l’exercice.');
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts').add({
+      'type': 'exercise', 'course': widget.course.name, 'content': content, 'difficulty': _difficulty, 'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+  Future<void> _generateAiExercise() async {
+    if (_aiBusy || _submitted) return;
+    setState(() { _aiBusy = true; _feedback = ''; });
+    try {
+      final generated = await _callStudyAi('exercise');
+      await _saveGeneratedExercise(generated);
+      final marker = RegExp(r'(?im)^\s*(?:#+\s*)?CORRECTION\s*:?').firstMatch(generated);
+      final question = marker == null ? generated : generated.substring(0, marker.start).trim();
+      if (mounted && question.isNotEmpty) setState(() { _generatedQuestion = question; });
+    } catch (error) {
+      if (mounted) setState(() => _feedback = 'Exercice IA indisponible : $error');
+    } finally { if (mounted) setState(() => _aiBusy = false); }
+  }
 
   int get _reward =>
       _difficulty == 'Facile' ? 1 : _difficulty == 'Moyen' ? 2 : 5;
@@ -848,10 +933,13 @@ class _ExercisePageState extends State<ExercisePage> {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    _question,
+                    _generatedQuestion ?? _question,
                     style: const TextStyle(fontSize: 16, height: 1.4),
                   ),
                   const SizedBox(height: 14),
+                  if (_aiBusy) const LinearProgressIndicator(),
+                  if (widget.course.content.trim().length >= 20 && !_submitted)
+                    Align(alignment: Alignment.centerRight, child: TextButton.icon(onPressed: _aiBusy ? null : _generateAiExercise, icon: const Icon(Icons.auto_awesome), label: const Text('Nouvel exercice IA'))),
                   TextField(
                     controller: _answer,
                     enabled: !_submitted,
@@ -880,7 +968,7 @@ class _ExercisePageState extends State<ExercisePage> {
             ],
             const SizedBox(height: 14),
             FilledButton.icon(
-              onPressed: _submitted || _answer.text.trim().isEmpty
+              onPressed: _submitted || _aiBusy || _answer.text.trim().isEmpty
                   ? null
                   : _submitAnswer,
               icon: const Icon(Icons.check_circle_outline),
@@ -899,27 +987,34 @@ class _ExercisePageState extends State<ExercisePage> {
                 ),
               ),
             const SizedBox(height: 10),
-            const Text(
-              'Correction de démonstration : les réponses sont vérifiées par des critères simples. Un correcteur IA complet n’est pas encore connecté.',
+            Text(
+              widget.course.content.trim().length >= 20 ? 'Exercice et correction générés à partir de ton cours par l’IA.' : 'Importe le cours dans cette matière pour générer des exercices personnalisés par l’IA.',
               style: TextStyle(color: Colors.white54, fontSize: 12),
             ),
           ],
         ),
       );
 
-  void _submitAnswer() {
-    if (!_isCorrect(_answer.text)) {
-      setState(() {
-        _feedback =
-            'Réponse non validée. Relis la consigne, vérifie les éléments essentiels et essaie encore.';
-      });
+  Future<void> _submitAnswer() async {
+    if (_aiBusy || _answer.text.trim().isEmpty) return;
+    if (widget.course.content.trim().length >= 20) {
+      setState(() { _aiBusy = true; _feedback = 'KING corrige ta réponse…'; });
+      try {
+        final correction = await _callStudyAi('correction', answer: 'Consigne : ${_generatedQuestion ?? _question}\nRéponse : ${_answer.text}');
+        final correct = RegExp(r'RESULTAT\s*:\s*BONNE', caseSensitive: false).hasMatch(correction);
+        if (!mounted) return;
+        setState(() { _feedback = correction; _submitted = correct; });
+        if (correct) { widget.onSubmitted(); widget.onAward(_reward, 'Exercice réussi'); }
+      } catch (error) {
+        if (mounted) setState(() => _feedback = 'Correction IA indisponible : $error. Réessaie.');
+      } finally { if (mounted) setState(() => _aiBusy = false); }
       return;
     }
-
-    setState(() {
-      _submitted = true;
-      _feedback = 'Bonne réponse ! Ton exercice est validé.';
-    });
+    if (!_isCorrect(_answer.text)) {
+      setState(() { _feedback = 'Réponse non validée. Relis la consigne et essaie encore.'; });
+      return;
+    }
+    setState(() { _submitted = true; _feedback = 'Bonne réponse ! Ton exercice est validé.'; });
     widget.onSubmitted();
     widget.onAward(_reward, 'Exercice réussi');
   }
@@ -1502,8 +1597,9 @@ void _comingSoon(BuildContext context, String feature) {
 
 
 class AuthGate extends StatelessWidget {
-  const AuthGate({super.key, required this.child});
+  const AuthGate({super.key, required this.child, required this.onAuthenticated});
   final Widget child;
+  final VoidCallback onAuthenticated;
   @override
   Widget build(BuildContext context) => StreamBuilder<User?>(
     stream: FirebaseAuth.instance.authStateChanges(),
@@ -1512,6 +1608,7 @@ class AuthGate extends StatelessWidget {
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       }
       if (snapshot.data == null) return const FirebaseLoginPage();
+      onAuthenticated();
       return child;
     },
   );

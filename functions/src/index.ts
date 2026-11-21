@@ -1,24 +1,17 @@
 import { initializeApp } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
-import { defineSecret, defineString } from 'firebase-functions/params';
+import { defineSecret } from 'firebase-functions/params';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
 initializeApp();
 const db = getFirestore();
 const geminiApiKey = defineSecret('GEMINI_API_KEY');
-const founderUid = defineString('STUDYMIND_FOUNDER_UID');
 
 function requireUser(request: { auth?: { uid: string } }) {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Connexion requise.');
   return request.auth.uid;
 }
 
-function requireFounder(uid: string) {
-  if (!founderUid.value() || uid !== founderUid.value()) {
-    throw new HttpsError('permission-denied', 'Action réservée à la fondatrice.');
-  }
-}
 
 export const generateStudyContent = onCall(
   { secrets: [geminiApiKey], timeoutSeconds: 120, memory: '512MiB', enforceAppCheck: false },
@@ -58,58 +51,3 @@ export const generateStudyContent = onCall(
     return { content: output };
   },
 );
-
-export const requestAdminRole = onCall(async (request) => {
-  const uid = requireUser(request);
-  const note = String(request.data?.note ?? '').slice(0, 1000);
-  await db.collection('adminCandidates').doc(uid).set({
-    uid, note, status: 'pending', requestedAt: FieldValue.serverTimestamp(),
-  }, { merge: true });
-  return { status: 'pending' };
-});
-
-export const approveAdminRole = onCall(async (request) => {
-  const uid = requireUser(request);
-  requireFounder(uid);
-  const targetUid = String(request.data?.targetUid ?? '').trim();
-  if (!targetUid || targetUid === uid) throw new HttpsError('invalid-argument', 'Candidat invalide.');
-  const candidate = db.collection('adminCandidates').doc(targetUid);
-  const snapshot = await candidate.get();
-  if (!snapshot.exists || snapshot.data()?.status !== 'pending') {
-    throw new HttpsError('failed-precondition', 'Aucune candidature en attente pour ce compte.');
-  }
-  await getAuth().setCustomUserClaims(targetUid, { ...(await getAuth().getUser(targetUid)).customClaims, studymindAdmin: true });
-  await candidate.set({ status: 'approved', approvedAt: FieldValue.serverTimestamp(), approvedBy: uid }, { merge: true });
-  await db.collection('adminAudit').add({ action: 'approve_admin', targetUid, actorUid: uid, at: FieldValue.serverTimestamp() });
-  return { status: 'approved' };
-});
-
-export const revokeAdminRole = onCall(async (request) => {
-  const uid = requireUser(request);
-  requireFounder(uid);
-  const targetUid = String(request.data?.targetUid ?? '').trim();
-  if (!targetUid || targetUid === uid) throw new HttpsError('invalid-argument', 'Cible invalide.');
-  const user = await getAuth().getUser(targetUid);
-  const claims = { ...(user.customClaims ?? {}) };
-  delete claims.studymindAdmin;
-  await getAuth().setCustomUserClaims(targetUid, claims);
-  await db.collection('adminCandidates').doc(targetUid).set({ status: 'revoked', revokedAt: FieldValue.serverTimestamp(), revokedBy: uid }, { merge: true });
-  await db.collection('adminAudit').add({ action: 'revoke_admin', targetUid, actorUid: uid, at: FieldValue.serverTimestamp() });
-  return { status: 'revoked' };
-});
-
-
-// Founder-only exception: direct appointment without candidate training/exam.
-export const founderDirectAppointAdmin = onCall(async (request) => {
-  const uid = requireUser(request);
-  requireFounder(uid);
-  const targetUid = String(request.data?.targetUid ?? '').trim();
-  if (!targetUid || targetUid === uid) throw new HttpsError('invalid-argument', 'Compte cible invalide.');
-  const target = await getAuth().getUser(targetUid);
-  await getAuth().setCustomUserClaims(targetUid, { ...(target.customClaims ?? {}), studymindAdmin: true });
-  await db.collection('adminCandidates').doc(targetUid).set({
-    uid: targetUid, status: 'approved_directly_by_founder', approvedAt: FieldValue.serverTimestamp(), approvedBy: uid,
-  }, { merge: true });
-  await db.collection('adminAudit').add({ action: 'founder_direct_appoint_admin', targetUid, actorUid: uid, at: FieldValue.serverTimestamp() });
-  return { status: 'approved_directly_by_founder' };
-});
