@@ -24,20 +24,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Create temporary Firebase anonymous session
+      - name: Create temporary Firebase email/password test account
         id: auth
         shell: bash
         run: |
           set -euo pipefail
           API_KEY="$(jq -r '.client[0].api_key[0].current_key' android/app/google-services.json)"
+          EMAIL="studymind-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}@example.com"
+          PASSWORD="$(openssl rand -hex 24)"
+          BODY="$(jq -n --arg email "$EMAIL" --arg password "$PASSWORD" '{email:$email,password:$password,returnSecureToken:true}')"
           HTTP_CODE="$(curl --silent --show-error -o /tmp/firebase-auth.json -w '%{http_code}' \
-            -H 'Content-Type: application/json' \
-            -d '{"returnSecureToken":true}' \
+            -H 'Content-Type: application/json' -d "$BODY" \
             "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${API_KEY}")"
           RESPONSE="$(cat /tmp/firebase-auth.json)"
           TOKEN="$(jq -r '.idToken // empty' <<< "$RESPONSE")"
           if [ -z "$TOKEN" ]; then
-            echo "Firebase anonymous sign-in refused the CI test account (HTTP $HTTP_CODE)."
+            echo "Firebase email/password test account creation failed (HTTP $HTTP_CODE)."
             jq '{error: .error.message}' <<< "$RESPONSE"
             exit 1
           fi
@@ -95,3 +97,16 @@ jobs:
           CONTENT="$(jq -r '.content // empty' <<< "$RESPONSE")"
           test "${#CONTENT}" -gt 80
           echo "CORRECTION_OK: non-empty correction generated."
+ 
+      - name: Delete temporary Firebase test account
+        if: always() && steps.auth.outputs.id_token != ''
+        env:
+          FIREBASE_ID_TOKEN: ${{ steps.auth.outputs.id_token }}
+        run: |
+          set -euo pipefail
+          API_KEY="$(jq -r '.client[0].api_key[0].current_key' android/app/google-services.json)"
+          curl --fail-with-body --silent --show-error \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -n --arg token "$FIREBASE_ID_TOKEN" '{idToken:$token}')" \
+            "https://identitytoolkit.googleapis.com/v1/accounts:delete?key=${API_KEY}" >/dev/null
+          echo "Temporary Firebase test account deleted."
