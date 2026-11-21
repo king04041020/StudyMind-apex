@@ -1,0 +1,44 @@
+name: Publish StudyMind APK as public release
+
+on:
+  workflow_run:
+    workflows:
+      - Build APK StudyMind Apex
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download validated APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: StudyMind-Apex-APK
+          path: release
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Verify APK file
+        run: |
+          test -s release/app-release.apk
+          file release/app-release.apk
+
+      - name: Publish public GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-apk
+          name: StudyMind Apex – dernière version
+          target_commitish: ${{ github.event.workflow_run.head_sha }}
+          body: |
+            Dernière version de StudyMind Apex.
+            APK générée et validée par GitHub Actions.
+          files: release/app-release.apk
+          overwrite_files: true
+          make_latest: true
