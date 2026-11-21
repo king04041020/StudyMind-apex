@@ -13,7 +13,7 @@ export default {
     if (url.pathname === "/health" && request.method === "GET") {
       return respond({ status: "ok", service: "StudyMind AI" });
     }
-    if (url.pathname !== "/api/chat" || request.method !== "POST") {
+    if (!["/api/chat", "/api/generate"].includes(url.pathname) || request.method !== "POST") {
       return respond({ error: "Route introuvable" }, 404);
     }
     try {
@@ -32,20 +32,51 @@ export default {
       const user = authData.users?.[0];
       if (!user || user.disabled) return respond({ error: "Compte non autorisé" }, 403);
 
-      // Protection anti-abus : 10 requêtes par utilisateur et par période de 60 secondes
-      if (!env.CHAT_USER_LIMITER) {
-        return respond({ error: "Protection anti-abus non configurée" }, 503);
-      }
-      const { success } = await env.CHAT_USER_LIMITER.limit({ key: user.localId });
-      if (!success) {
-        return respond({
-          error: "Limite atteinte. Réessaie dans une minute.",
-          code: "RATE_LIMITED"
-        }, 429);
-      }
-
       let body;
       try { body = await request.json(); } catch (_) { return respond({ error: "Corps JSON invalide" }, 400); }
+
+      // La limite est appliquée lorsqu'un Durable Object est configuré.
+      // Son absence ne doit pas rendre l'assistant inutilisable.
+      if (env.CHAT_USER_LIMITER) {
+        const { success } = await env.CHAT_USER_LIMITER.limit({ key: user.localId });
+        if (!success) return respond({ error: "Limite atteinte. Réessaie dans une minute.", code: "RATE_LIMITED" }, 429);
+      }
+
+      if (url.pathname === "/api/generate") {
+        const task = String(body.task || "").toLowerCase();
+        const course = String(body.course || "Matière non précisée").slice(0, 120);
+        const difficulty = String(body.difficulty || "Moyen").slice(0, 30);
+        const source = String(body.text || "").trim().slice(0, 24000);
+        const answer = String(body.answer || "").trim().slice(0, 6000);
+        const allowed = ["revision", "exercise", "correction", "summary", "quests"];
+        if (!allowed.includes(task)) return respond({ error: "Type de génération inconnu." }, 400);
+        if (source.length < 20) return respond({ error: "Ajoute d'abord le contenu du cours (au moins 20 caractères)." }, 400);
+        let prompt;
+        if (task === "quests") {
+          prompt = 'Génère 6 quêtes pédagogiques personnalisées, 3 principales et 3 secondaires, réparties entre les matières du contenu. Réponds uniquement en JSON valide : {"quests":[{"id":"id-stable","title":"...","description":"...","course":"...","type":"Principale ou Secondaire","reward":5}]}. Les quêtes doivent être concrètes, variées et réalisables par un élève. Récompenses entières de 3 à 10 PR.';
+        } else if (task === "revision" || task === "summary") {
+          prompt = task === "revision"
+            ? "Crée une fiche de révision complète et pédagogique avec titre, objectifs, notions clés, définitions, explications, exemples et mini-récapitulatif."
+            : "Fais un résumé fidèle, clair et structuré du cours avec les idées essentielles.";
+        } else if (task === "exercise") {
+          prompt = "Crée un exercice original basé uniquement sur le cours. Respecte la difficulté demandée. Donne la consigne, les données utiles et une correction détaillée dans une section séparée intitulée CORRECTION (à ne pas confondre avec la consigne).";
+        } else {
+          prompt = "Corrige la réponse de l'élève à partir du cours. Explique ce qui est juste, ce qui manque ou est faux, puis donne une réponse modèle. Termine par une ligne exactement au format RESULTAT: BONNE ou RESULTAT: A_REVOIR. N'accorde pas automatiquement la réussite.";
+        }
+        const userPrompt = task === "correction"
+          ? `Matière: ${course}\nCours:\n${source}\nRéponse de l'élève:\n${answer}\n\nTâche: ${prompt}`
+          : `Matière: ${course}\nDifficulté: ${difficulty}\nCours:\n${source}\n\nTâche: ${prompt}`;
+        const generated = await fetch(
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
+            body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: userPrompt }] }], generationConfig: { temperature: 0.45, maxOutputTokens: 3000 } }) }
+        );
+        const generatedData = await generated.json();
+        if (!generated.ok) return respond({ error: "La génération IA a échoué. Vérifie la clé Gemini du Worker." }, 502);
+        const content = generatedData.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("\\n").trim();
+        if (!content) return respond({ error: "Gemini n'a renvoyé aucun contenu." }, 502);
+        return respond({ content });
+      }
       const message = String(body.message || "").trim();
       const requestedMode = String(body.mode || "KING").toUpperCase();
       const mode = ["KING", "QUEEN", "PERSONNALISÉ"].includes(requestedMode) ? requestedMode : "KING";
