@@ -567,7 +567,10 @@ class _StudyMindAppState extends State<StudyMindApp> {
     showDialog(context: _navigatorKey.currentContext!, barrierDismissible: false, builder: (ctx) => const AlertDialog(content: Row(children: [CircularProgressIndicator(), SizedBox(width: 16), Expanded(child: Text('KING prépare ta fiche de révision…'))])));
     try {
       final generated = await _generateStudyContent(task: 'revision', course: course);
-      await _saveStudyArtifact('revision', course, generated);
+      // L'affichage ne dépend pas des règles Firestore : conserver la fiche même
+      // si son archivage cloud échoue.
+      try { await _saveStudyArtifact('revision', course, generated); }
+      catch (saveError) { debugPrint('StudyMind fiche non archivée : $saveError'); }
       if (!mounted) return;
       _navigatorKey.currentState?.pop();
       showDialog(context: _navigatorKey.currentContext!, builder: (ctx) => AlertDialog(title: Text('Fiche IA • ${course.name}'), content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: SelectableText(generated))), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fermer'))]));
@@ -911,7 +914,9 @@ class ExercisePage extends StatefulWidget {
 
 class _ExercisePageState extends State<ExercisePage> {
   String _difficulty = 'Facile';
-  late bool _submitted = widget.alreadySubmitted;
+  // Une ancienne réussite ne doit pas empêcher de générer un nouvel exercice.
+  // Les PR restent protégés contre les doublons dans le parent.
+  bool _submitted = false;
   final TextEditingController _answer = TextEditingController();
   String _feedback = '';
   String? _generatedQuestion;
@@ -955,7 +960,7 @@ class _ExercisePageState extends State<ExercisePage> {
     });
   }
   Future<void> _generateAiExercise() async {
-    if (_aiBusy || _submitted) return;
+    if (_aiBusy) return;
     setState(() { _aiBusy = true; _feedback = ''; });
     try {
       final generated = await _callStudyAi('exercise');
@@ -1114,8 +1119,20 @@ class _ExercisePageState extends State<ExercisePage> {
                   ),
                   const SizedBox(height: 14),
                   if (_aiBusy) const LinearProgressIndicator(),
-                  if (widget.course.content.trim().length >= 20 && !_submitted)
-                    Align(alignment: Alignment.centerRight, child: TextButton.icon(onPressed: _aiBusy ? null : _generateAiExercise, icon: const Icon(Icons.auto_awesome), label: const Text('Nouvel exercice IA'))),
+                  if (widget.course.content.trim().length >= 20)
+                    Align(alignment: Alignment.centerRight, child: TextButton.icon(
+                      onPressed: _aiBusy ? null : () {
+                        setState(() {
+                          _submitted = false;
+                          _answer.clear();
+                          _feedback = '';
+                          _generatedQuestion = null;
+                        });
+                        _generateAiExercise();
+                      },
+                      icon: const Icon(Icons.auto_awesome),
+                      label: const Text('Générer un nouvel exercice'),
+                    )),
                   TextField(
                     controller: _answer,
                     enabled: !_submitted,
