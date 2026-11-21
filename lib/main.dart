@@ -29,6 +29,8 @@ class StudyMindApp extends StatefulWidget {
 }
 
 class _StudyMindAppState extends State<StudyMindApp> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  final GlobalKey<ScaffoldMessengerState> _messengerKey = GlobalKey<ScaffoldMessengerState>();
   int _points = 0;
   int _tab = 0;
   bool _secretQuestDone = false;
@@ -242,7 +244,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
     if (points <= 0) return;
     setState(() => _points += points);
     _saveData();
-    ScaffoldMessenger.of(context).showSnackBar(
+    _messengerKey.currentState!.showSnackBar(
       SnackBar(
         content: Text('$label : +$points PR'),
         backgroundColor: const Color(0xFF126B91),
@@ -273,6 +275,8 @@ class _StudyMindAppState extends State<StudyMindApp> {
           elevation: 0,
         ),
       ),
+      navigatorKey: _navigatorKey,
+      scaffoldMessengerKey: _messengerKey,
       home: AuthGate(onAuthenticated: _syncCloudCourses, child: Scaffold(
         body: SafeArea(
           child: _loading
@@ -315,7 +319,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
                 ),
         ),
         floatingActionButton: _loading ? null : FloatingActionButton.extended(
-          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AssistantChatPage(mode: _assistantIdentity, style: _assistantStyle, course: _courses.isNotEmpty ? _courses.first.name : '', courseContext: _courses.isNotEmpty ? _courses.first.content : '', assistantName: _assistantName))),
+          onPressed: () => _navigatorKey.currentState!.push(MaterialPageRoute(builder: (_) => AssistantChatPage(mode: _assistantIdentity, style: _assistantStyle, course: _courses.isNotEmpty ? _courses.first.name : '', courseContext: _courses.isNotEmpty ? _courses.first.content : '', assistantName: _assistantName))),
           icon: const Icon(Icons.auto_awesome), label: const Text('IA'),
         ),
         bottomNavigationBar: _loading
@@ -370,7 +374,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
         .trim();
     if (source.length < 20) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        _messengerKey.currentState!.showSnackBar(
           const SnackBar(content: Text('Ajoute le contenu de tes cours pour générer des quêtes.')),
         );
       }
@@ -419,7 +423,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
       await _saveData();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        _messengerKey.currentState!.showSnackBar(
           SnackBar(content: Text('Quêtes IA : $error')),
         );
       }
@@ -450,7 +454,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
     final nameController = TextEditingController();
     final contentController = TextEditingController();
     showDialog(
-      context: context,
+      context: _navigatorKey.currentContext!,
       builder: (ctx) => AlertDialog(
         title: const Text('Créer une matière'),
         content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -490,13 +494,13 @@ class _StudyMindAppState extends State<StudyMindApp> {
               try {
                 await _saveData();
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  _messengerKey.currentState!.showSnackBar(
                     SnackBar(content: Text('Matière « $name » créée et enregistrée.')),
                   );
                 }
               } catch (error) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  _messengerKey.currentState!.showSnackBar(
                     SnackBar(content: Text('Matière créée sur cet appareil ; synchronisation à réessayer : $error')),
                   );
                 }
@@ -544,36 +548,36 @@ class _StudyMindAppState extends State<StudyMindApp> {
       setState(() => _courses.add(course));
       await _saveData();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cours importé et enregistré sur cet appareil.')));
+      _messengerKey.currentState!.showSnackBar(const SnackBar(content: Text('Cours importé et enregistré sur cet appareil.')));
       _showSummary(course);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Import impossible : $error')));
+      _messengerKey.currentState!.showSnackBar(SnackBar(content: Text('Import impossible : $error')));
     }
   }
 
   Future<void> _showSummary(Course course) async {
     if (course.content.trim().length < 20) {
-      _comingSoon(context, 'Ajoute le contenu de cette matière avec Importer un cours pour créer une fiche IA.');
+      _comingSoon(_navigatorKey.currentContext!, 'Ajoute le contenu de cette matière avec Importer un cours pour créer une fiche IA.');
       return;
     }
-    showDialog(context: context, barrierDismissible: false, builder: (ctx) => const AlertDialog(content: Row(children: [CircularProgressIndicator(), SizedBox(width: 16), Expanded(child: Text('KING prépare ta fiche de révision…'))])));
+    showDialog(context: _navigatorKey.currentContext!, barrierDismissible: false, builder: (ctx) => const AlertDialog(content: Row(children: [CircularProgressIndicator(), SizedBox(width: 16), Expanded(child: Text('KING prépare ta fiche de révision…'))])));
     try {
       final generated = await _generateStudyContent(task: 'revision', course: course);
       await _saveStudyArtifact('revision', course, generated);
       if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
-      showDialog(context: context, builder: (ctx) => AlertDialog(title: Text('Fiche IA • ${course.name}'), content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: SelectableText(generated))), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fermer'))]));
+      _navigatorKey.currentState?.pop();
+      showDialog(context: _navigatorKey.currentContext!, builder: (ctx) => AlertDialog(title: Text('Fiche IA • ${course.name}'), content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: SelectableText(generated))), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fermer'))]));
     } catch (error) {
       if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Création de fiche impossible : $error')));
+      _navigatorKey.currentState?.pop();
+      _messengerKey.currentState!.showSnackBar(SnackBar(content: Text('Création de fiche impossible : $error')));
     }
   }
   void _openExercise(Course course) {
     final exerciseId = course.name;
     Navigator.push(
-      context,
+      _navigatorKey.currentContext!,
       MaterialPageRoute(
         builder: (_) => ExercisePage(
           course: course,
