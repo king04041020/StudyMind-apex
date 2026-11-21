@@ -754,6 +754,42 @@ class _ExercisePageState extends State<ExercisePage> {
   late bool _submitted = widget.alreadySubmitted;
   final TextEditingController _answer = TextEditingController();
   String _feedback = '';
+  String? _generatedQuestion;
+  bool _aiBusy = false;
+  String? _aiCorrection;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.course.content.trim().length >= 20) _generateAiExercise();
+  }
+
+  Future<String> _callStudyAi(String task, {String answer = ''}) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('Connexion Firebase requise.');
+    final token = await user.getIdToken(true);
+    final response = await http.post(
+      Uri.parse('https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate'),
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      body: jsonEncode({'task': task, 'course': widget.course.name, 'text': widget.course.content, 'answer': answer, 'difficulty': _difficulty}),
+    ).timeout(const Duration(seconds: 90));
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode < 200 || response.statusCode >= 300) throw Exception(data['error']?.toString() ?? 'Erreur IA (${response.statusCode})');
+    return data['content']?.toString() ?? '';
+  }
+
+  Future<void> _generateAiExercise() async {
+    if (_aiBusy || _submitted) return;
+    setState(() { _aiBusy = true; _feedback = ''; });
+    try {
+      final generated = await _callStudyAi('exercise');
+      final marker = RegExp(r'(?im)^\\s*(?:#+\\s*)?CORRECTION\\s*:?').firstMatch(generated);
+      final question = marker == null ? generated : generated.substring(0, marker.start).trim();
+      if (mounted && question.isNotEmpty) setState(() { _generatedQuestion = question; _aiCorrection = generated; });
+    } catch (error) {
+      if (mounted) setState(() => _feedback = 'Exercice IA indisponible : $error');
+    } finally { if (mounted) setState(() => _aiBusy = false); }
+  }
 
   int get _reward =>
       _difficulty == 'Facile' ? 1 : _difficulty == 'Moyen' ? 2 : 5;
@@ -896,10 +932,13 @@ class _ExercisePageState extends State<ExercisePage> {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    _question,
+                    _generatedQuestion ?? _question,
                     style: const TextStyle(fontSize: 16, height: 1.4),
                   ),
                   const SizedBox(height: 14),
+                  if (_aiBusy) const LinearProgressIndicator(),
+                  if (widget.course.content.trim().length >= 20 && !_submitted)
+                    Align(alignment: Alignment.centerRight, child: TextButton.icon(onPressed: _aiBusy ? null : _generateAiExercise, icon: const Icon(Icons.auto_awesome), label: const Text('Nouvel exercice IA'))),
                   TextField(
                     controller: _answer,
                     enabled: !_submitted,
@@ -928,7 +967,7 @@ class _ExercisePageState extends State<ExercisePage> {
             ],
             const SizedBox(height: 14),
             FilledButton.icon(
-              onPressed: _submitted || _answer.text.trim().isEmpty
+              onPressed: _submitted || _aiBusy || _answer.text.trim().isEmpty
                   ? null
                   : _submitAnswer,
               icon: const Icon(Icons.check_circle_outline),
@@ -948,26 +987,33 @@ class _ExercisePageState extends State<ExercisePage> {
               ),
             const SizedBox(height: 10),
             const Text(
-              'Correction de démonstration : les réponses sont vérifiées par des critères simples. Un correcteur IA complet n’est pas encore connecté.',
+              widget.course.content.trim().length >= 20 ? 'Exercice et correction générés à partir de ton cours par l’IA.' : 'Importe le cours dans cette matière pour générer des exercices personnalisés par l’IA.',
               style: TextStyle(color: Colors.white54, fontSize: 12),
             ),
           ],
         ),
       );
 
-  void _submitAnswer() {
-    if (!_isCorrect(_answer.text)) {
-      setState(() {
-        _feedback =
-            'Réponse non validée. Relis la consigne, vérifie les éléments essentiels et essaie encore.';
-      });
+  Future<void> _submitAnswer() async {
+    if (_aiBusy || _answer.text.trim().isEmpty) return;
+    if (widget.course.content.trim().length >= 20) {
+      setState(() { _aiBusy = true; _feedback = 'KING corrige ta réponse…'; });
+      try {
+        final correction = await _callStudyAi('correction', answer: 'Consigne : ${_generatedQuestion ?? _question}\nRéponse : ${_answer.text}');
+        final correct = RegExp(r'RESULTAT\\s*:\\s*BONNE', caseSensitive: false).hasMatch(correction);
+        if (!mounted) return;
+        setState(() { _aiCorrection = correction; _feedback = correction; _submitted = correct; });
+        if (correct) { widget.onSubmitted(); widget.onAward(_reward, 'Exercice réussi'); }
+      } catch (error) {
+        if (mounted) setState(() => _feedback = 'Correction IA indisponible : $error. Réessaie.');
+      } finally { if (mounted) setState(() => _aiBusy = false); }
       return;
     }
-
-    setState(() {
-      _submitted = true;
-      _feedback = 'Bonne réponse ! Ton exercice est validé.';
-    });
+    if (!_isCorrect(_answer.text)) {
+      setState(() { _feedback = 'Réponse non validée. Relis la consigne et essaie encore.'; });
+      return;
+    }
+    setState(() { _submitted = true; _feedback = 'Bonne réponse ! Ton exercice est validé.'; });
     widget.onSubmitted();
     widget.onAward(_reward, 'Exercice réussi');
   }
