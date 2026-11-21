@@ -74,6 +74,8 @@ jobs:
           api-level: 33
           arch: x86_64
           profile: pixel_2
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          disable-animations: true
           script: |
             adb install -r build/app/outputs/flutter-apk/app-release.apk
             adb shell pm path com.studymind.app
