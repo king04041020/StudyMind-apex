@@ -15,25 +15,45 @@ export default {
       catch (_) { return { _raw: raw.slice(0, 1200) }; }
     };
 
-    // Gemini peut être temporairement surchargé (429/5xx). On réessaie
-    // une fois le modèle principal, puis on bascule vers Flash-Lite.
+    // Les appels Gemini peuvent rester bloqués en cas de surcharge.
+    // Chaque tentative est bornée pour qu'un fallback puisse être essayé
+    // avant le timeout HTTP du client.
     const callGemini = async (payload, apiKey) => {
-      const models = ["gemini-3.8-flash", "gemini-3.5-flash-lite"];
-      let last = { ok: false, status: 503, data: { error: { message: "Service Gemini temporairement indisponible." } }, model: models[0] };
-      for (const model of models) {
-        for (let attempt = 0; attempt < 2; attempt++) {
-          const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-            { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-              body: JSON.stringify(payload) }
-          );
-          const data = await parseUpstream(response);
-          if (response.ok) return { ok: true, status: response.status, data, model };
-          last = { ok: false, status: response.status, data, model };
-          // Les erreurs de configuration/requête ne seront pas corrigées
-          // par un changement de modèle : on les renvoie immédiatement.
-          if (![429, 500, 502, 503, 504].includes(response.status)) return last;
-          if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 700));
+      const plan = [
+        { model: "gemini-3.8-flash", attempts: 1 },
+        { model: "gemini-3.5-flash-lite", attempts: 2 }
+      ];
+      let last = {
+        ok: false, status: 503,
+        data: { error: { message: "Service Gemini temporairement indisponible." } },
+        model: "gemini-3.8-flash"
+      };
+      for (const item of plan) {
+        for (let attempt = 0; attempt < item.attempts; attempt++) {
+          try {
+            const response = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${item.model}:generateContent`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+                body: JSON.stringify(payload),
+                signal: AbortSignal.timeout(24000)
+              }
+            );
+            const data = await parseUpstream(response);
+            if (response.ok) return { ok: true, status: response.status, data, model: item.model };
+            last = { ok: false, status: response.status, data, model: item.model };
+            if (![429, 500, 502, 503, 504].includes(response.status)) return last;
+          } catch (error) {
+            last = {
+              ok: false, status: 504,
+              data: { error: { message: `Délai Gemini dépassé ou réseau indisponible : ${String(error?.message || error).slice(0, 250)}` } },
+              model: item.model
+            };
+          }
+          if (attempt + 1 < item.attempts || item !== plan[plan.length - 1]) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
         }
       }
       return last;
@@ -107,7 +127,7 @@ export default {
           : `Matière: ${course}\nDifficulté: ${difficulty}\nCours:\n${source}\n\nTâche: ${prompt}`;
         const generated = await callGemini({
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: { temperature: 0.45, maxOutputTokens: 3000 }
+          generationConfig: { temperature: 0.45, maxOutputTokens: 2200 }
         }, geminiApiKey);
         const generatedData = generated.data;
         if (!generated.ok) {
