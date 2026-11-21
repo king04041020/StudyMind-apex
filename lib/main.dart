@@ -916,7 +916,7 @@ class StudyArtifactArchivePage extends StatelessWidget {
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: stream,
         builder: (context, snapshot) {
-          if (snapshot.hasError) return Center(child: Text('Chargement impossible : \${snapshot.error}'));
+          if (snapshot.hasError) return Center(child: Text('Chargement impossible : ${snapshot.error}'));
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           final docs = snapshot.data!.docs;
           if (docs.isEmpty) return const Center(child: Text('Aucune fiche ou aucun exercice enregistré pour le moment.'));
@@ -926,7 +926,7 @@ class StudyArtifactArchivePage extends StatelessWidget {
             itemBuilder: (context, index) {
               final data = docs[index].data();
               final revision = data['type'] == 'revision';
-              final title = '\${revision ? 'Fiche de révision' : 'Exercice'} • \${data['course'] ?? 'Cours'}';
+              final title = '${revision ? 'Fiche de révision' : 'Exercice'} • ${data['course'] ?? 'Cours'}';
               return Card(child: ListTile(
                 leading: Icon(revision ? Icons.summarize_outlined : Icons.assignment_outlined, color: systemBlue),
                 title: Text(title),
