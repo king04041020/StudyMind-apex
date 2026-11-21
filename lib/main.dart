@@ -917,6 +917,7 @@ class _ExercisePageState extends State<ExercisePage> {
   // Une ancienne réussite ne doit pas empêcher de générer un nouvel exercice.
   // Les PR restent protégés contre les doublons dans le parent.
   bool _submitted = false;
+  bool _rewardClaimed = false;
   final TextEditingController _answer = TextEditingController();
   String _feedback = '';
   String? _generatedQuestion;
@@ -925,6 +926,7 @@ class _ExercisePageState extends State<ExercisePage> {
   @override
   void initState() {
     super.initState();
+    _rewardClaimed = widget.alreadySubmitted;
     if (widget.course.content.trim().length >= 20) _generateAiExercise();
   }
 
@@ -1199,7 +1201,13 @@ class _ExercisePageState extends State<ExercisePage> {
         final correct = RegExp(r'RESULTAT\s*:\s*BONNE', caseSensitive: false).hasMatch(correction);
         if (!mounted) return;
         setState(() { _feedback = correction; _submitted = correct; });
-        if (correct) { widget.onSubmitted(); widget.onAward(_reward, 'Exercice réussi'); }
+        if (correct) {
+          widget.onSubmitted();
+          if (!_rewardClaimed) {
+            _rewardClaimed = true;
+            widget.onAward(_reward, 'Exercice réussi');
+          }
+        }
       } catch (error) {
         if (mounted) setState(() => _feedback = 'Correction IA indisponible : $error. Réessaie.');
       } finally { if (mounted) setState(() => _aiBusy = false); }
@@ -1211,7 +1219,10 @@ class _ExercisePageState extends State<ExercisePage> {
     }
     setState(() { _submitted = true; _feedback = 'Bonne réponse ! Ton exercice est validé.'; });
     widget.onSubmitted();
-    widget.onAward(_reward, 'Exercice réussi');
+    if (!_rewardClaimed) {
+      _rewardClaimed = true;
+      widget.onAward(_reward, 'Exercice réussi');
+    }
   }
 }
 
