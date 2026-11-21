@@ -114,6 +114,14 @@ class _StudyMindAppState extends State<StudyMindApp> {
           setState(() {
             _courses = restored;
             _points = (cloudData['points'] as num?)?.toInt() ?? _points;
+            _completedExercises = cloudData['completedExercises'] is List ? (cloudData['completedExercises'] as List).map((e)=>e.toString()).toSet() : _completedExercises;
+            _dailyQuestDone = cloudData['dailyQuestDone'] as bool? ?? _dailyQuestDone;
+            _dailyQuestDate = cloudData['dailyQuestDate']?.toString() ?? _dailyQuestDate;
+            _secretQuestDone = cloudData['secretQuestDone'] as bool? ?? _secretQuestDone;
+            _assistantIdentity = cloudData['assistantIdentity']?.toString() ?? _assistantIdentity;
+            _assistantName = cloudData['assistantName']?.toString() ?? _assistantName;
+            _assistantStyle = cloudData['assistantStyle']?.toString() ?? _assistantStyle;
+            _customAssistantName = cloudData['customAssistantName']?.toString() ?? _customAssistantName;
             _aiQuests = cloudData['aiQuests'] is List ? (cloudData['aiQuests'] as List).whereType<Map>().map((e) => Map<String,String>.from(e)).toList() : _aiQuests;
             _completedQuestIds = cloudData['completedQuestIds'] is List ? (cloudData['completedQuestIds'] as List).map((e)=>e.toString()).toSet() : _completedQuestIds;
             _questCycle = cloudData['questCycle']?.toString() ?? _questCycle;
