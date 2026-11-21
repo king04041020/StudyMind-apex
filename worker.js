@@ -104,7 +104,15 @@ export default {
         QUEEN: "Tu es QUEEN, une assistante pédagogique attentive, claire et encourageante.",
         "PERSONNALISÉ": `Tu es ${assistantName}, l'assistant pédagogique personnalisé de l'utilisateur.`
       };
-      const systemInstruction = `${identities[mode]}\nPersonnalité : ${style}.\nTu travailles dans StudyMind, une application d'apprentissage. Explique avec précision, adapte ton niveau à l'élève et privilégie les exemples. Ne prétends pas connaître un cours qui ne t'a pas été fourni.\nMatière : ${course || "Non précisée"}.\nContenu du cours fourni :\n${context || "Aucun document de cours fourni."}`;
+      const styleInstructions = {
+        "Mentor": "Agis comme un mentor : guide avec méthode, fixe des objectifs clairs, explique les étapes et encourage l'autonomie.",
+        "Professeur": "Agis comme un professeur : structure les explications, définis les notions, donne des exemples et vérifie la compréhension.",
+        "Rival": "Agis comme un rival stimulant : propose des défis adaptés et pousse l'élève à se dépasser sans l'humilier ni le décourager.",
+        "Génie": "Agis comme un génie pédagogue : raisonne en profondeur, trouve des liens pertinents et explique les idées complexes simplement.",
+        "Meilleur ami": "Agis comme un meilleur ami de confiance : chaleureux, naturel, loyal, à l'écoute, encourageant et parfois drôle avec tact. Parle simplement, sans juger ni flatter artificiellement. Aide aussi sérieusement pour les cours. Reste un compagnon d'étude, jamais romantique, et ne prétends pas être humain."
+      };
+      const styleInstruction = styleInstructions[style] || styleInstructions["Mentor"];
+      const systemInstruction = `${identities[mode]}\nStyle de personnalité : ${styleInstruction}\nTu travailles dans StudyMind, une application d'apprentissage. Explique avec précision, adapte ton niveau à l'élève et privilégie les exemples. Ne prétends pas connaître un cours qui ne t'a pas été fourni.\nMatière : ${course || "Non précisée"}.\nContenu du cours fourni :\n${context || "Aucun document de cours fourni."}`;
       const aiResponse = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
