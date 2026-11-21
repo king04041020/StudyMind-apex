@@ -750,7 +750,6 @@ class _ExercisePageState extends State<ExercisePage> {
   String _feedback = '';
   String? _generatedQuestion;
   bool _aiBusy = false;
-  String? _aiCorrection;
 
   @override
   void initState() {
@@ -787,7 +786,7 @@ class _ExercisePageState extends State<ExercisePage> {
       await _saveGeneratedExercise(generated);
       final marker = RegExp(r'(?im)^\s*(?:#+\s*)?CORRECTION\s*:?').firstMatch(generated);
       final question = marker == null ? generated : generated.substring(0, marker.start).trim();
-      if (mounted && question.isNotEmpty) setState(() { _generatedQuestion = question; _aiCorrection = generated; });
+      if (mounted && question.isNotEmpty) setState(() { _generatedQuestion = question; });
     } catch (error) {
       if (mounted) setState(() => _feedback = 'Exercice IA indisponible : $error');
     } finally { if (mounted) setState(() => _aiBusy = false); }
@@ -1004,7 +1003,7 @@ class _ExercisePageState extends State<ExercisePage> {
         final correction = await _callStudyAi('correction', answer: 'Consigne : ${_generatedQuestion ?? _question}\nRéponse : ${_answer.text}');
         final correct = RegExp(r'RESULTAT\s*:\s*BONNE', caseSensitive: false).hasMatch(correction);
         if (!mounted) return;
-        setState(() { _aiCorrection = correction; _feedback = correction; _submitted = correct; });
+        setState(() { _feedback = correction; _submitted = correct; });
         if (correct) { widget.onSubmitted(); widget.onAward(_reward, 'Exercice réussi'); }
       } catch (error) {
         if (mounted) setState(() => _feedback = 'Correction IA indisponible : $error. Réessaie.');
