@@ -27,6 +27,14 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        getByName("debug") {
+            // Compatibilité maximale avec les installateurs Android : signatures v1 et v2.
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+    }
+
     buildTypes {
         release {
             // Pour les premiers APK de test. Une clé de signature dédiée sera nécessaire
