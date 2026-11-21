@@ -37,9 +37,14 @@ export default {
 
       // La limite est appliquée lorsqu'un Durable Object est configuré.
       // Son absence ne doit pas rendre l'assistant inutilisable.
-      if (env.CHAT_USER_LIMITER) {
-        const { success } = await env.CHAT_USER_LIMITER.limit({ key: user.localId });
-        if (!success) return respond({ error: "Limite atteinte. Réessaie dans une minute.", code: "RATE_LIMITED" }, 429);
+      // Ne jamais faire échouer toutes les requêtes IA à cause d'un binding de limite mal configuré.
+      if (env.CHAT_USER_LIMITER && typeof env.CHAT_USER_LIMITER.limit === "function") {
+        try {
+          const { success } = await env.CHAT_USER_LIMITER.limit({ key: user.localId });
+          if (!success) return respond({ error: "Limite atteinte. Réessaie dans une minute.", code: "RATE_LIMITED" }, 429);
+        } catch (limitError) {
+          console.warn("StudyMind limiter indisponible; requête autorisée", limitError);
+        }
       }
 
       if (url.pathname === "/api/generate") {
@@ -79,7 +84,7 @@ export default {
       }
       const message = String(body.message || "").trim();
       const requestedMode = String(body.mode || "KING").toUpperCase();
-      const mode = ["KING", "QUEEN", "PERSONNALISÉ"].includes(requestedMode) ? requestedMode : "KING";
+      const mode = ["KING", "QUEEN", "MEILLEUR AMI", "PERSONNALISÉ"].includes(requestedMode) ? requestedMode : "KING";
       const style = String(body.style || "Mentor").slice(0, 80);
       const course = String(body.course || "").slice(0, 120);
       const assistantName = String(body.assistantName || mode).slice(0, 80);
@@ -88,6 +93,7 @@ export default {
       const identities = {
         KING: "Tu es KING, un assistant pédagogique stratégique, exigeant et motivant.",
         QUEEN: "Tu es QUEEN, une assistante pédagogique attentive, claire et encourageante.",
+        "MEILLEUR AMI": "Tu es le meilleur ami de l'élève dans StudyMind : chaleureux, loyal, naturel, drôle avec tact et toujours respectueux. Tu encourages sans juger, écoutes vraiment, expliques simplement les cours et aides à garder confiance. Tu restes un compagnon d'étude, jamais romantique, et tu ne prétends pas être humain.",
         "PERSONNALISÉ": `Tu es ${assistantName}, l'assistant pédagogique personnalisé de l'utilisateur.`
       };
       const systemInstruction = `${identities[mode]}\nPersonnalité : ${style}.\nTu travailles dans StudyMind, une application d'apprentissage. Explique avec précision, adapte ton niveau à l'élève et privilégie les exemples. Ne prétends pas connaître un cours qui ne t'a pas été fourni.\nMatière : ${course || "Non précisée"}.\nContenu du cours fourni :\n${context || "Aucun document de cours fourni."}`;
@@ -101,8 +107,9 @@ export default {
       const answer = result.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("").trim();
       if (!answer) return respond({ error: "Réponse IA indisponible" }, 502);
       return respond({ answer, assistant: mode, course });
-    } catch (_) {
-      return respond({ error: "Erreur interne du service StudyMind" }, 500);
+    } catch (error) {
+      console.error("StudyMind Worker internal error", error);
+      return respond({ error: "Erreur interne du service StudyMind", code: "WORKER_INTERNAL" }, 500);
     }
   }
 };
