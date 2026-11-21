@@ -7,6 +7,7 @@ import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -34,6 +35,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
   bool _dailyQuestDone = false;
   String _dailyQuestDate = '';
   bool _loading = true;
+  String? _cloudUid;
 
   Set<String> _completedExercises = {};
   String _assistantName = 'KING';
@@ -96,6 +98,42 @@ class _StudyMindAppState extends State<StudyMindApp> {
     if (savedDailyDate != todayKey) await prefs.setBool('dailyQuestDone', false);
   }
 
+  Future<void> _syncCloudCourses() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || _cloudUid == user.uid) return;
+    _cloudUid = user.uid;
+    try {
+      final ref = FirebaseFirestore.instance.collection('users').doc(user.uid).collection('appData').doc('main');
+      final snapshot = await ref.get();
+      final cloudCourses = snapshot.data()?['courses'];
+      if (cloudCourses is List && cloudCourses.isNotEmpty) {
+        final restored = cloudCourses.whereType<Map>().map((item) => Course.fromJson(Map<String, dynamic>.from(item))).toList();
+        if (mounted && restored.isNotEmpty) {
+          setState(() => _courses = restored);
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('courses', jsonEncode(_courses.map((c) => c.toJson()).toList()));
+        }
+      } else {
+        await ref.set({'courses': _courses.map((c) => c.toJson()).toList(), 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
+      }
+    } catch (error) { debugPrint('StudyMind cloud sync failed: $error'); }
+  }
+
+  Future<String> _generateStudyContent({required String task, required Course course, String answer = '', String difficulty = 'Moyen'}) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('Connecte-toi à ton compte Firebase.');
+    if (course.content.trim().length < 20) throw Exception('Ajoute le contenu du cours avant de générer une fiche ou un exercice.');
+    final token = await user.getIdToken(true);
+    final response = await http.post(Uri.parse('https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate'),
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      body: jsonEncode({'task': task, 'course': course.name, 'text': course.content, 'answer': answer, 'difficulty': difficulty}),
+    ).timeout(const Duration(seconds: 90));
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode < 200 || response.statusCode >= 300) throw Exception(data['error']?.toString() ?? 'Erreur IA (${response.statusCode})');
+    final content = data['content']?.toString() ?? '';
+    if (content.isEmpty) throw Exception('L’IA n’a renvoyé aucun contenu.');
+    return content;
+  }
   Future<void> _saveData() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('points', _points);
@@ -112,6 +150,15 @@ class _StudyMindAppState extends State<StudyMindApp> {
       'courses',
       jsonEncode(_courses.map((course) => course.toJson()).toList()),
     );
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('appData').doc('main').set({
+          'courses': _courses.map((course) => course.toJson()).toList(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (error) { debugPrint('StudyMind cloud save failed: $error'); }
+    }
   }
 
   String get _rank {
@@ -150,6 +197,8 @@ class _StudyMindAppState extends State<StudyMindApp> {
 
   @override
   Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null && _cloudUid != uid) { Future.microtask(_syncCloudCourses); }
     final scheme = ColorScheme.fromSeed(
       seedColor: systemBlue,
       brightness: Brightness.dark,
@@ -351,24 +400,23 @@ class _StudyMindAppState extends State<StudyMindApp> {
     }
   }
 
-  void _showSummary(Course course) {
-    final text = course.content.trim();
-    if (text.isEmpty) {
-      _comingSoon(context, 'Ajoute d’abord un document texte ou PDF à cette matière pour créer une fiche.');
+  Future<void> _showSummary(Course course) async {
+    if (course.content.trim().length < 20) {
+      _comingSoon(context, 'Ajoute le contenu de cette matière avec Importer un cours pour créer une fiche IA.');
       return;
     }
-    final sentences = text.split(RegExp(r'(?<=[.!?])\s+')).where((s) => s.trim().length > 35).toList();
-    final summary = sentences.take(8).join('\n\n');
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Fiche de révision • ${course.name}'),
-        content: SingleChildScrollView(child: SelectableText(summary.isEmpty ? text.substring(0, text.length > 1800 ? 1800 : text.length) : summary)),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fermer'))],
-      ),
-    );
+    showDialog(context: context, barrierDismissible: false, builder: (ctx) => const AlertDialog(content: Row(children: [CircularProgressIndicator(), SizedBox(width: 16), Expanded(child: Text('KING prépare ta fiche de révision…'))])));
+    try {
+      final generated = await _generateStudyContent(task: 'revision', course: course);
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      showDialog(context: context, builder: (ctx) => AlertDialog(title: Text('Fiche IA • ${course.name}'), content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: SelectableText(generated))), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fermer'))]));
+    } catch (error) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Création de fiche impossible : $error')));
+    }
   }
-
   void _openExercise(Course course) {
     final exerciseId = course.name;
     Navigator.push(
