@@ -14,6 +14,30 @@ export default {
       try { return JSON.parse(raw); }
       catch (_) { return { _raw: raw.slice(0, 1200) }; }
     };
+
+    // Gemini peut être temporairement surchargé (429/5xx). On réessaie
+    // une fois le modèle principal, puis on bascule vers Flash-Lite.
+    const callGemini = async (payload, apiKey) => {
+      const models = ["gemini-3.8-flash", "gemini-3.5-flash-lite"];
+      let last = { ok: false, status: 503, data: { error: { message: "Service Gemini temporairement indisponible." } }, model: models[0] };
+      for (const model of models) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+            { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+              body: JSON.stringify(payload) }
+          );
+          const data = await parseUpstream(response);
+          if (response.ok) return { ok: true, status: response.status, data, model };
+          last = { ok: false, status: response.status, data, model };
+          // Les erreurs de configuration/requête ne seront pas corrigées
+          // par un changement de modèle : on les renvoie immédiatement.
+          if (![429, 500, 502, 503, 504].includes(response.status)) return last;
+          if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 700));
+        }
+      }
+      return last;
+    };
     if (request.method === "OPTIONS") return new Response(null, { headers: cors });
     const url = new URL(request.url);
     if (url.pathname === "/health" && request.method === "GET") {
@@ -81,20 +105,19 @@ export default {
         const userPrompt = task === "correction"
           ? `Matière: ${course}\nCours:\n${source}\nRéponse de l'élève:\n${answer}\n\nTâche: ${prompt}`
           : `Matière: ${course}\nDifficulté: ${difficulty}\nCours:\n${source}\n\nTâche: ${prompt}`;
-        const generated = await fetch(
-          "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
-          { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": geminiApiKey },
-            body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: userPrompt }] }], generationConfig: { temperature: 0.45, maxOutputTokens: 3000 } }) }
-        );
-        const generatedData = await parseUpstream(generated);
+        const generated = await callGemini({
+          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+          generationConfig: { temperature: 0.45, maxOutputTokens: 3000 }
+        }, geminiApiKey);
+        const generatedData = generated.data;
         if (!generated.ok) {
           const detail = generatedData.error?.message || generatedData.message || generatedData._raw || "Réponse Gemini invalide.";
-          console.error("StudyMind Gemini generation error", generated.status, detail);
+          console.error("StudyMind Gemini generation error", generated.status, generated.model, detail);
           return respond({ error: `Gemini (HTTP ${generated.status}) : ${String(detail).slice(0, 700)}` }, 502);
         }
         const content = generatedData.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("\n").trim();
         if (!content) return respond({ error: "Gemini n'a renvoyé aucun contenu." }, 502);
-        return respond({ content });
+        return respond({ content, model: generated.model });
       }
       const message = String(body.message || "").trim();
       const requestedMode = String(body.mode || "KING").toUpperCase();
@@ -118,20 +141,20 @@ export default {
       };
       const styleInstruction = styleInstructions[style] || styleInstructions["Mentor"];
       const systemInstruction = `${identities[mode]}\nStyle de personnalité : ${styleInstruction}\nTu travailles dans StudyMind, une application d'apprentissage. Explique avec précision, adapte ton niveau à l'élève et privilégie les exemples. Ne prétends pas connaître un cours qui ne t'a pas été fourni.\nMatière : ${course || "Non précisée"}.\nContenu du cours fourni :\n${context || "Aucun document de cours fourni."}`;
-      const aiResponse = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
-        { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": geminiApiKey },
-          body: JSON.stringify({ systemInstruction: { parts: [{ text: systemInstruction }] }, contents: [{ role: "user", parts: [{ text: message }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } }) }
-      );
-      const result = await parseUpstream(aiResponse);
+      const aiResponse = await callGemini({
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        contents: [{ role: "user", parts: [{ text: message }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 2048 }
+      }, geminiApiKey);
+      const result = aiResponse.data;
       if (!aiResponse.ok) {
         const detail = result.error?.message || result.message || result._raw || "Réponse Gemini invalide.";
-        console.error("StudyMind Gemini chat error", aiResponse.status, detail);
+        console.error("StudyMind Gemini chat error", aiResponse.status, aiResponse.model, detail);
         return respond({ error: `Gemini (HTTP ${aiResponse.status}) : ${String(detail).slice(0, 700)}` }, 502);
       }
       const answer = result.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("").trim();
       if (!answer) return respond({ error: "Réponse IA indisponible" }, 502);
-      return respond({ answer, assistant: mode, course });
+      return respond({ answer, assistant: mode, course, model: aiResponse.model });
     } catch (error) {
       console.error("StudyMind Worker internal error", error);
       return respond({
