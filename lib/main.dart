@@ -1655,4 +1655,3 @@ class _AssistantChatPageState extends State<AssistantChatPage> {
     ]),
   );
 }
-),
