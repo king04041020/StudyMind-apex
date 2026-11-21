@@ -987,7 +987,7 @@ class _ExercisePageState extends State<ExercisePage> {
                 ),
               ),
             const SizedBox(height: 10),
-            const Text(
+            Text(
               widget.course.content.trim().length >= 20 ? 'Exercice et correction générés à partir de ton cours par l’IA.' : 'Importe le cours dans cette matière pour générer des exercices personnalisés par l’IA.',
               style: TextStyle(color: Colors.white54, fontSize: 12),
             ),
