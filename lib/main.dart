@@ -90,7 +90,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
       _assistantIdentity = storedIdentity == 'Garçon' ? 'KING' : storedIdentity == 'Fille' ? 'QUEEN' : storedIdentity;
       _customAssistantName = prefs.getString('customAssistantName') ?? 'Mon assistant';
       _assistantName = prefs.getString('assistantName') ??
-          (_assistantIdentity == 'QUEEN' ? 'QUEEN' : _assistantIdentity == 'PERSONNALISÉ' ? _customAssistantName : 'KING');
+          (_assistantIdentity == 'QUEEN' ? 'QUEEN' : _assistantIdentity == 'MEILLEUR AMI' ? 'MEILLEUR AMI' : _assistantIdentity == 'PERSONNALISÉ' ? _customAssistantName : 'KING');
       _assistantStyle = prefs.getString('assistantStyle') ?? 'Mentor';
       _courses = loadedCourses;
       _aiQuests = prefs.getString('aiQuests') == null ? <Map<String,String>>[] : (jsonDecode(prefs.getString('aiQuests')!) as List).whereType<Map>().map((e) => Map<String,String>.from(e)).toList();
@@ -359,7 +359,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
     setState(() {
       _assistantIdentity = identity;
       if (customName != null && customName.trim().isNotEmpty) _customAssistantName = customName.trim();
-      _assistantName = identity == 'QUEEN' ? 'QUEEN' : identity == 'PERSONNALISÉ' ? _customAssistantName : 'KING';
+      _assistantName = identity == 'QUEEN' ? 'QUEEN' : identity == 'MEILLEUR AMI' ? 'MEILLEUR AMI' : identity == 'PERSONNALISÉ' ? _customAssistantName : 'KING';
       _assistantStyle = style;
     });
     _saveData();
@@ -1413,6 +1413,7 @@ void _assistantDialog(
               items: const [
                 DropdownMenuItem(value: 'KING', child: Text('KING')),
                 DropdownMenuItem(value: 'QUEEN', child: Text('QUEEN')),
+                DropdownMenuItem(value: 'MEILLEUR AMI', child: Text('MEILLEUR AMI')),
                 DropdownMenuItem(value: 'PERSONNALISÉ', child: Text('Personnalisé')),
               ],
               onChanged: (value) {
@@ -1720,7 +1721,7 @@ class _AssistantChatPageState extends State<AssistantChatPage> {
   void dispose() { _controller.dispose(); super.dispose(); }
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('StudyMind • Assistant IA'), actions:[IconButton(tooltip:'Déconnexion', icon:const Icon(Icons.logout), onPressed:()=>FirebaseAuth.instance.signOut())]),
+    appBar: AppBar(leading: IconButton(tooltip:'Retour', icon:const Icon(Icons.arrow_back), onPressed:()=>Navigator.of(context).maybePop()), title: Text('StudyMind • ${widget.assistantName}')),
     body: Column(children:[
       Expanded(child: _messages.isEmpty ? Center(child: Text('Pose une question à ${widget.assistantName}. Le contenu de ta matière sera transmis si disponible.')) : ListView.builder(padding:const EdgeInsets.all(16), itemCount:_messages.length, itemBuilder:(context,index){ final m=_messages[index]; final mine=m['role']=='user'; return Align(alignment:mine?Alignment.centerRight:Alignment.centerLeft, child: Container(margin:const EdgeInsets.symmetric(vertical:6), padding:const EdgeInsets.all(12), constraints:const BoxConstraints(maxWidth:340), decoration:BoxDecoration(color:mine?const Color(0xFF124A68):panelBlue,borderRadius:BorderRadius.circular(14)), child:Text(m['text']??'')));})),
       if (_error != null) Padding(padding:const EdgeInsets.symmetric(horizontal:12), child:Text(_error!,style:const TextStyle(color:Colors.redAccent))),
