@@ -1,3 +1,4 @@
+// StudyMind AI Worker — covered by automated authenticated end-to-end tests.
 export default {
   async fetch(request, env) {
     const cors = {
