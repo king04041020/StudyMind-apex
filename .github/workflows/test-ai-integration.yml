@@ -52,9 +52,15 @@ jobs:
         run: |
           set -euo pipefail
           BODY="$(jq -n --arg message 'Réponds exactement : STUDYMIND_CHAT_OK' '{message:$message,mode:"KING",style:"Professeur",course:"Test",context:"Test de disponibilité."}')"
-          RESPONSE="$(curl --fail-with-body --silent --show-error --max-time 90 \
+          HTTP_CODE="$(curl --silent --show-error --max-time 90 -o /tmp/worker-chat.json -w '%{http_code}' \
             -H 'Content-Type: application/json' -H "Authorization: Bearer $FIREBASE_ID_TOKEN" \
             -d "$BODY" 'https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/chat')"
+          RESPONSE="$(cat /tmp/worker-chat.json)"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Worker chat returned HTTP $HTTP_CODE:"
+            jq . <<< "$RESPONSE"
+            exit 1
+          fi
           ANSWER="$(jq -r '.answer // empty' <<< "$RESPONSE")"
           test -n "$ANSWER"
           echo "CHAT_OK: Gemini returned a non-empty answer."
