@@ -109,10 +109,18 @@ class _StudyMindAppState extends State<StudyMindApp> {
       final cloudData = snapshot.data() ?? {};
       final cloudCourses = cloudData['courses'];
       if (cloudCourses is List && cloudCourses.isNotEmpty) {
-        final restored = cloudCourses.whereType<Map>().map((item) => Course.fromJson(Map<String, dynamic>.from(item))).toList();
-        if (mounted && restored.isNotEmpty) {
+        final restored = cloudCourses
+            .whereType<Map>()
+            .map((item) => Course.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+        // Keep courses created locally while the first cloud sync was still running.
+        final merged = <String, Course>{
+          for (final course in restored) course.name.trim().toLowerCase(): course,
+          for (final course in _courses) course.name.trim().toLowerCase(): course,
+        }.values.toList();
+        if (mounted) {
           setState(() {
-            _courses = restored;
+            _courses = merged;
             _points = (cloudData['points'] as num?)?.toInt() ?? _points;
             _completedExercises = cloudData['completedExercises'] is List ? (cloudData['completedExercises'] as List).map((e)=>e.toString()).toSet() : _completedExercises;
             _dailyQuestDone = cloudData['dailyQuestDone'] as bool? ?? _dailyQuestDone;
@@ -128,6 +136,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
           });
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('courses', jsonEncode(_courses.map((c) => c.toJson()).toList()));
+          await ref.set(_cloudState(), SetOptions(merge: true));
         }
       } else {
         await ref.set(_cloudState(), SetOptions(merge: true));
@@ -162,8 +171,16 @@ class _StudyMindAppState extends State<StudyMindApp> {
       headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
       body: jsonEncode({'task': task, 'course': course.name, 'text': course.content, 'answer': answer, 'difficulty': difficulty}),
     ).timeout(const Duration(seconds: 90));
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    if (response.statusCode < 200 || response.statusCode >= 300) throw Exception(data['error']?.toString() ?? 'Erreur IA (${response.statusCode})');
+    Map<String, dynamic> data;
+    try {
+      final decoded = jsonDecode(response.body);
+      data = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+    } catch (_) {
+      throw Exception('Le serveur IA a renvoyé une réponse illisible (HTTP ${response.statusCode}).');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(data['error']?.toString() ?? 'Service IA indisponible (HTTP ${response.statusCode}).');
+    }
     final content = data['content']?.toString() ?? '';
     if (content.isEmpty) throw Exception('L’IA n’a renvoyé aucun contenu.');
     return content;
@@ -442,13 +459,46 @@ class _StudyMindAppState extends State<StudyMindApp> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
           FilledButton(
-            onPressed: () {
+            onPressed: () async {
               final name = nameController.text.trim();
-              if (name.isEmpty) return;
+              if (name.isEmpty) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('Donne un nom à cette matière.')),
+                );
+                return;
+              }
+              final normalized = name.toLowerCase();
+              if (_courses.any((course) => course.name.trim().toLowerCase() == normalized)) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('Cette matière existe déjà.')),
+                );
+                return;
+              }
               final content = contentController.text.trim();
-              setState(() => _courses.add(Course(name: name, detail: content.isEmpty ? 'Nouvel espace de cours' : 'Cours ajouté • ${content.length} caractères', icon: Icons.auto_stories, content: content)));
-              _saveData();
+              final course = Course(
+                name: name,
+                detail: content.isEmpty
+                    ? 'Nouvel espace de cours'
+                    : 'Cours ajouté • ${content.length} caractères',
+                icon: Icons.auto_stories,
+                content: content,
+              );
+              setState(() => _courses.add(course));
               Navigator.pop(ctx);
+              try {
+                await _saveData();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Matière « $name » créée et enregistrée.')),
+                  );
+                }
+              } catch (error) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Matière créée sur cet appareil ; synchronisation à réessayer : $error')),
+                  );
+                }
+              }
             },
             child: const Text('Créer'),
           ),
