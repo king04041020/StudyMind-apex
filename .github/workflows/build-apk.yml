@@ -52,6 +52,33 @@ jobs:
       - name: Construire APK
         run: flutter build apk --release --no-tree-shake-icons
 
+      - name: Verifier integrite, alignement, signature et manifeste APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          test -s "$APK"
+          file "$APK"
+          unzip -t "$APK"
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          "$BUILD_TOOLS/zipalign" -c -v 4 "$APK"
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest application-id "$APK" | grep -Fx "com.studymind.app"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest min-sdk "$APK"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest target-sdk "$APK"
+          ls -lh "$APK"
+
+      - name: Tester installation sur emulateur Android 13
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          arch: x86_64
+          profile: pixel_2
+          script: |
+            adb install -r build/app/outputs/flutter-apk/app-release.apk
+            adb shell pm path com.studymind.app
+            adb uninstall com.studymind.app
+
       - name: Publier le fichier APK
         uses: actions/upload-artifact@v5
         with:
