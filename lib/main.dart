@@ -116,7 +116,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
       } else {
         await ref.set({'courses': _courses.map((c) => c.toJson()).toList(), 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
       }
-    } catch (error) { debugPrint('StudyMind cloud sync failed: $error'); }
+    } catch (error) { _cloudUid = null; debugPrint('StudyMind cloud sync failed: $error'); }
   }
 
   Future<String> _generateStudyContent({required String task, required Course course, String answer = '', String difficulty = 'Moyen'}) async {
@@ -314,48 +314,34 @@ class _StudyMindAppState extends State<StudyMindApp> {
   }
 
   void _addCourse() {
-    final controller = TextEditingController();
+    final nameController = TextEditingController();
+    final contentController = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Ajouter une matière'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Nom de la matière',
-            hintText: 'Ex. : Comptabilité générale',
-          ),
-        ),
+        title: const Text('Créer une matière'),
+        content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: nameController, autofocus: true, decoration: const InputDecoration(labelText: 'Nom de la matière', hintText: 'Ex. : Comptabilité générale')),
+          const SizedBox(height: 12),
+          TextField(controller: contentController, minLines: 3, maxLines: 7, decoration: const InputDecoration(labelText: 'Contenu du cours (facultatif)', hintText: 'Colle ici ton cours pour permettre à KING de créer des fiches et exercices IA.', border: OutlineInputBorder())),
+        ]))),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
           FilledButton(
             onPressed: () {
-              final name = controller.text.trim();
-              if (name.isNotEmpty) {
-                setState(() {
-                  _courses.add(
-                    Course(
-                      name: name,
-                      detail: 'Nouvel espace de cours',
-                      icon: Icons.auto_stories,
-                    ),
-                  );
-                });
-                _saveData();
-              }
+              final name = nameController.text.trim();
+              if (name.isEmpty) return;
+              final content = contentController.text.trim();
+              setState(() => _courses.add(Course(name: name, detail: content.isEmpty ? 'Nouvel espace de cours' : 'Cours ajouté • ${content.length} caractères', icon: Icons.auto_stories, content: content)));
+              _saveData();
               Navigator.pop(ctx);
             },
             child: const Text('Créer'),
           ),
         ],
       ),
-    );
+    ).then((_) { nameController.dispose(); contentController.dispose(); });
   }
-
   Future<void> _importCourse() async {
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -783,7 +769,7 @@ class _ExercisePageState extends State<ExercisePage> {
     setState(() { _aiBusy = true; _feedback = ''; });
     try {
       final generated = await _callStudyAi('exercise');
-      final marker = RegExp(r'(?im)^\\s*(?:#+\\s*)?CORRECTION\\s*:?').firstMatch(generated);
+      final marker = RegExp(r'(?im)^\s*(?:#+\s*)?CORRECTION\s*:?').firstMatch(generated);
       final question = marker == null ? generated : generated.substring(0, marker.start).trim();
       if (mounted && question.isNotEmpty) setState(() { _generatedQuestion = question; _aiCorrection = generated; });
     } catch (error) {
@@ -1000,7 +986,7 @@ class _ExercisePageState extends State<ExercisePage> {
       setState(() { _aiBusy = true; _feedback = 'KING corrige ta réponse…'; });
       try {
         final correction = await _callStudyAi('correction', answer: 'Consigne : ${_generatedQuestion ?? _question}\nRéponse : ${_answer.text}');
-        final correct = RegExp(r'RESULTAT\\s*:\\s*BONNE', caseSensitive: false).hasMatch(correction);
+        final correct = RegExp(r'RESULTAT\s*:\s*BONNE', caseSensitive: false).hasMatch(correction);
         if (!mounted) return;
         setState(() { _aiCorrection = correction; _feedback = correction; _submitted = correct; });
         if (correct) { widget.onSubmitted(); widget.onAward(_reward, 'Exercice réussi'); }
