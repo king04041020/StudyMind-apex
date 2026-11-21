@@ -119,6 +119,13 @@ class _StudyMindAppState extends State<StudyMindApp> {
     } catch (error) { _cloudUid = null; debugPrint('StudyMind cloud sync failed: $error'); }
   }
 
+  Future<void> _saveStudyArtifact(String type, Course course, String content) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('Connexion Firebase requise pour enregistrer.');
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts').add({
+      'type': type, 'course': course.name, 'content': content, 'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
   Future<String> _generateStudyContent({required String task, required Course course, String answer = '', String difficulty = 'Moyen'}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) throw Exception('Connecte-toi à ton compte Firebase.');
@@ -394,6 +401,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
     showDialog(context: context, barrierDismissible: false, builder: (ctx) => const AlertDialog(content: Row(children: [CircularProgressIndicator(), SizedBox(width: 16), Expanded(child: Text('KING prépare ta fiche de révision…'))])));
     try {
       final generated = await _generateStudyContent(task: 'revision', course: course);
+      await _saveStudyArtifact('revision', course, generated);
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
       showDialog(context: context, builder: (ctx) => AlertDialog(title: Text('Fiche IA • ${course.name}'), content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: SelectableText(generated))), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fermer'))]));
@@ -764,11 +772,19 @@ class _ExercisePageState extends State<ExercisePage> {
     return data['content']?.toString() ?? '';
   }
 
+  Future<void> _saveGeneratedExercise(String content) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('Connexion Firebase requise pour enregistrer l’exercice.');
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts').add({
+      'type': 'exercise', 'course': widget.course.name, 'content': content, 'difficulty': _difficulty, 'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
   Future<void> _generateAiExercise() async {
     if (_aiBusy || _submitted) return;
     setState(() { _aiBusy = true; _feedback = ''; });
     try {
       final generated = await _callStudyAi('exercise');
+      await _saveGeneratedExercise(generated);
       final marker = RegExp(r'(?im)^\s*(?:#+\s*)?CORRECTION\s*:?').firstMatch(generated);
       final question = marker == null ? generated : generated.substring(0, marker.start).trim();
       if (mounted && question.isNotEmpty) setState(() { _generatedQuestion = question; _aiCorrection = generated; });
