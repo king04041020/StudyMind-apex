@@ -26,11 +26,15 @@ export default {
       const authorization = request.headers.get("Authorization") || "";
       const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
       if (!token) return respond({ error: "Connexion Firebase requise" }, 401);
-      if (!env.FIREBASE_WEB_API_KEY || !env.GEMINI_API_KEY) {
+      // Les secrets collés depuis un tableau de bord peuvent contenir des
+      // espaces ou retours à la ligne invisibles, invalides dans un en-tête HTTP.
+      const geminiApiKey = String(env.GEMINI_API_KEY || "").replace(/\s/g, "");
+      const firebaseApiKey = String(env.FIREBASE_WEB_API_KEY || "").trim();
+      if (!firebaseApiKey || !geminiApiKey) {
         return respond({ error: "Configuration serveur incomplète" }, 500);
       }
       const authResponse = await fetch(
-        `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.FIREBASE_WEB_API_KEY}`,
+        `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseApiKey}`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken: token }) }
       );
       if (!authResponse.ok) return respond({ error: "Session Firebase invalide" }, 401);
@@ -79,7 +83,7 @@ export default {
           : `Matière: ${course}\nDifficulté: ${difficulty}\nCours:\n${source}\n\nTâche: ${prompt}`;
         const generated = await fetch(
           "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-          { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
+          { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": geminiApiKey },
             body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: userPrompt }] }], generationConfig: { temperature: 0.45, maxOutputTokens: 3000 } }) }
         );
         const generatedData = await parseUpstream(generated);
@@ -116,7 +120,7 @@ export default {
       const systemInstruction = `${identities[mode]}\nStyle de personnalité : ${styleInstruction}\nTu travailles dans StudyMind, une application d'apprentissage. Explique avec précision, adapte ton niveau à l'élève et privilégie les exemples. Ne prétends pas connaître un cours qui ne t'a pas été fourni.\nMatière : ${course || "Non précisée"}.\nContenu du cours fourni :\n${context || "Aucun document de cours fourni."}`;
       const aiResponse = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-        { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
+        { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": geminiApiKey },
           body: JSON.stringify({ systemInstruction: { parts: [{ text: systemInstruction }] }, contents: [{ role: "user", parts: [{ text: message }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } }) }
       );
       const result = await parseUpstream(aiResponse);
