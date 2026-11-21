@@ -225,7 +225,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
           elevation: 0,
         ),
       ),
-      home: AuthGate(child: Scaffold(
+      home: AuthGate(onAuthenticated: _syncCloudCourses, child: Scaffold(
         body: SafeArea(
           child: _loading
               ? const Center(
@@ -1598,8 +1598,9 @@ void _comingSoon(BuildContext context, String feature) {
 
 
 class AuthGate extends StatelessWidget {
-  const AuthGate({super.key, required this.child});
+  const AuthGate({super.key, required this.child, required this.onAuthenticated});
   final Widget child;
+  final VoidCallback onAuthenticated;
   @override
   Widget build(BuildContext context) => StreamBuilder<User?>(
     stream: FirebaseAuth.instance.authStateChanges(),
@@ -1608,6 +1609,7 @@ class AuthGate extends StatelessWidget {
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       }
       if (snapshot.data == null) return const FirebaseLoginPage();
+      onAuthenticated();
       return child;
     },
   );
