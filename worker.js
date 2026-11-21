@@ -8,6 +8,11 @@ export default {
     const respond = (data, status = 200) => new Response(JSON.stringify(data), {
       status, headers: { ...cors, "Content-Type": "application/json" }
     });
+    const parseUpstream = async (response) => {
+      const raw = await response.text();
+      try { return JSON.parse(raw); }
+      catch (_) { return { _raw: raw.slice(0, 1200) }; }
+    };
     if (request.method === "OPTIONS") return new Response(null, { headers: cors });
     const url = new URL(request.url);
     if (url.pathname === "/health" && request.method === "GET") {
@@ -28,7 +33,7 @@ export default {
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken: token }) }
       );
       if (!authResponse.ok) return respond({ error: "Session Firebase invalide" }, 401);
-      const authData = await authResponse.json();
+      const authData = await parseUpstream(authResponse);
       const user = authData.users?.[0];
       if (!user || user.disabled) return respond({ error: "Compte non autorisé" }, 403);
 
@@ -76,15 +81,19 @@ export default {
           { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
             body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: userPrompt }] }], generationConfig: { temperature: 0.45, maxOutputTokens: 3000 } }) }
         );
-        const generatedData = await generated.json();
-        if (!generated.ok) return respond({ error: "La génération IA a échoué. Vérifie la clé Gemini du Worker." }, 502);
+        const generatedData = await parseUpstream(generated);
+        if (!generated.ok) {
+          const detail = generatedData.error?.message || generatedData.message || generatedData._raw || "Réponse Gemini invalide.";
+          console.error("StudyMind Gemini generation error", generated.status, detail);
+          return respond({ error: `Gemini (HTTP ${generated.status}) : ${String(detail).slice(0, 700)}` }, 502);
+        }
         const content = generatedData.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("\\n").trim();
         if (!content) return respond({ error: "Gemini n'a renvoyé aucun contenu." }, 502);
         return respond({ content });
       }
       const message = String(body.message || "").trim();
       const requestedMode = String(body.mode || "KING").toUpperCase();
-      const mode = ["KING", "QUEEN", "MEILLEUR AMI", "PERSONNALISÉ"].includes(requestedMode) ? requestedMode : "KING";
+      const mode = ["KING", "QUEEN", "PERSONNALISÉ"].includes(requestedMode) ? requestedMode : "KING";
       const style = String(body.style || "Mentor").slice(0, 80);
       const course = String(body.course || "").slice(0, 120);
       const assistantName = String(body.assistantName || mode).slice(0, 80);
@@ -93,7 +102,6 @@ export default {
       const identities = {
         KING: "Tu es KING, un assistant pédagogique stratégique, exigeant et motivant.",
         QUEEN: "Tu es QUEEN, une assistante pédagogique attentive, claire et encourageante.",
-        "MEILLEUR AMI": "Tu es le meilleur ami de l'élève dans StudyMind : chaleureux, loyal, naturel, drôle avec tact et toujours respectueux. Tu encourages sans juger, écoutes vraiment, expliques simplement les cours et aides à garder confiance. Tu restes un compagnon d'étude, jamais romantique, et tu ne prétends pas être humain.",
         "PERSONNALISÉ": `Tu es ${assistantName}, l'assistant pédagogique personnalisé de l'utilisateur.`
       };
       const systemInstruction = `${identities[mode]}\nPersonnalité : ${style}.\nTu travailles dans StudyMind, une application d'apprentissage. Explique avec précision, adapte ton niveau à l'élève et privilégie les exemples. Ne prétends pas connaître un cours qui ne t'a pas été fourni.\nMatière : ${course || "Non précisée"}.\nContenu du cours fourni :\n${context || "Aucun document de cours fourni."}`;
@@ -102,14 +110,22 @@ export default {
         { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
           body: JSON.stringify({ systemInstruction: { parts: [{ text: systemInstruction }] }, contents: [{ role: "user", parts: [{ text: message }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } }) }
       );
-      const result = await aiResponse.json();
-      if (!aiResponse.ok) return respond({ error: "Le service Gemini n'a pas pu répondre." }, 502);
+      const result = await parseUpstream(aiResponse);
+      if (!aiResponse.ok) {
+        const detail = result.error?.message || result.message || result._raw || "Réponse Gemini invalide.";
+        console.error("StudyMind Gemini chat error", aiResponse.status, detail);
+        return respond({ error: `Gemini (HTTP ${aiResponse.status}) : ${String(detail).slice(0, 700)}` }, 502);
+      }
       const answer = result.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("").trim();
       if (!answer) return respond({ error: "Réponse IA indisponible" }, 502);
       return respond({ answer, assistant: mode, course });
     } catch (error) {
       console.error("StudyMind Worker internal error", error);
-      return respond({ error: "Erreur interne du service StudyMind", code: "WORKER_INTERNAL" }, 500);
+      return respond({
+        error: "Erreur interne du service StudyMind",
+        code: "WORKER_INTERNAL",
+        diagnostic: String(error?.message || error || "Erreur inconnue").slice(0, 500)
+      }, 500);
     }
   }
 };
