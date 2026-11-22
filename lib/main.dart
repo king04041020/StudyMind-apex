@@ -163,11 +163,28 @@ class _StudyMindAppState extends State<StudyMindApp> {
   };
 
   Future<void> _saveStudyArtifact(String type, Course course, String content) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception('Connexion Firebase requise pour enregistrer.');
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts').add({
-      'type': type, 'course': course.name, 'content': content, 'createdAt': FieldValue.serverTimestamp(),
+    final prefs = await SharedPreferences.getInstance();
+    List<dynamic> saved = [];
+    try {
+      final raw = prefs.getString('studyArtifacts');
+      if (raw != null) saved = jsonDecode(raw) as List<dynamic>;
+    } catch (_) {}
+    saved.insert(0, {
+      'type': type, 'course': course.name, 'content': content,
+      'createdAt': DateTime.now().toIso8601String(),
     });
+    if (saved.length > 100) saved = saved.take(100).toList();
+    await prefs.setString('studyArtifacts', jsonEncode(saved));
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts').add({
+        'type': type, 'course': course.name, 'content': content, 'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      debugPrint('StudyMind archive cloud save failed; local copy kept: $error');
+    }
   }
   Future<String> _generateStudyContent({required String task, required Course course, String answer = '', String difficulty = 'Moyen'}) async {
     final user = FirebaseAuth.instance.currentUser;
@@ -904,44 +921,119 @@ class _CoursesPage extends StatelessWidget {
 }
 
 
-class StudyArtifactArchivePage extends StatelessWidget {
+class StudyArtifactArchivePage extends StatefulWidget {
   const StudyArtifactArchivePage({super.key});
+
+  @override
+  State<StudyArtifactArchivePage> createState() => _StudyArtifactArchivePageState();
+}
+
+class _StudyArtifactArchivePageState extends State<StudyArtifactArchivePage> {
+  List<Map<String, dynamic>> _localArtifacts = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocalArtifacts();
+  }
+
+  Future<void> _loadLocalArtifacts() async {
+    final prefs = await SharedPreferences.getInstance();
+    try {
+      final raw = prefs.getString('studyArtifacts');
+      final decoded = raw == null ? <dynamic>[] : jsonDecode(raw) as List<dynamic>;
+      if (mounted) {
+        setState(() {
+          _localArtifacts = decoded.whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item)).toList();
+        });
+      }
+    } catch (error) {
+      debugPrint('StudyMind local archive load failed: $error');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return const Scaffold(body: Center(child: Text('Connecte-toi pour consulter tes documents.')));
-    final stream = FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts').orderBy('createdAt', descending: true).snapshots();
+    final stream = user == null ? null : FirebaseFirestore.instance
+        .collection('users').doc(user.uid).collection('studyArtifacts')
+        .orderBy('createdAt', descending: true).snapshots();
+
     return Scaffold(
       appBar: AppBar(title: const Text('MES DOCUMENTS ENREGISTRÉS')),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: stream,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) return Center(child: Text('Chargement impossible : ${snapshot.error}'));
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          final docs = snapshot.data!.docs;
-          if (docs.isEmpty) return const Center(child: Text('Aucune fiche ou aucun exercice enregistré pour le moment.'));
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: docs.length,
-            itemBuilder: (context, index) {
-              final data = docs[index].data();
-              final revision = data['type'] == 'revision';
-              final title = '${revision ? 'Fiche de révision' : 'Exercice'} • ${data['course'] ?? 'Cours'}';
-              return Card(child: ListTile(
-                leading: Icon(revision ? Icons.summarize_outlined : Icons.assignment_outlined, color: systemBlue),
+      body: user == null
+          ? _buildArtifactList(_localArtifacts)
+          : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: stream,
+              builder: (context, snapshot) {
+                final combined = <Map<String, dynamic>>[];
+                if (snapshot.hasData) {
+                  combined.addAll(snapshot.data!.docs.map((doc) => doc.data()));
+                }
+                for (final local in _localArtifacts) {
+                  final duplicate = combined.any((cloud) =>
+                      cloud['type'] == local['type'] &&
+                      cloud['course'] == local['course'] &&
+                      cloud['content'] == local['content']);
+                  if (!duplicate) combined.add(local);
+                }
+                if (snapshot.hasError && combined.isEmpty) {
+                  return const Center(child: Text('Impossible de charger les documents. Réessaie plus tard.'));
+                }
+                if (!snapshot.hasData && _localArtifacts.isEmpty) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                return _buildArtifactList(combined);
+              },
+            ),
+    );
+  }
+
+  Widget _buildArtifactList(List<Map<String, dynamic>> docs) {
+    if (docs.isEmpty) {
+      return const Center(child: Text('Aucune fiche ou aucun exercice enregistré pour le moment.'));
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: docs.length,
+      itemBuilder: (context, index) {
+        final data = docs[index];
+        final revision = data['type'] == 'revision';
+        final title = '${revision ? 'Fiche de révision' : 'Exercice'} • ${data['course'] ?? 'Cours'}';
+        final createdAt = data['createdAt'];
+        final dateLabel = createdAt is Timestamp
+            ? createdAt.toDate().toLocal().toString().substring(0, 16)
+            : createdAt is String
+                ? (DateTime.tryParse(createdAt)?.toLocal().toString().substring(0, 16) ?? 'Enregistré')
+                : 'Enregistré';
+        return Card(
+          child: ListTile(
+            leading: Icon(revision ? Icons.summarize_outlined : Icons.assignment_outlined, color: systemBlue),
+            title: Text(title),
+            subtitle: Text(dateLabel),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => showDialog(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
                 title: Text(title),
-                subtitle: Text(data['createdAt'] is Timestamp ? (data['createdAt'] as Timestamp).toDate().toLocal().toString().substring(0, 16) : 'Enregistré'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => showDialog(context: context, builder: (dialogContext) => AlertDialog(
-                  title: Text(title),
-                  content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: SelectableText(data['content']?.toString() ?? 'Contenu indisponible.'))),
-                  actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Fermer'))],
-                )),
-              ));
-            },
-          );
-        },
-      ),
+                content: SizedBox(
+                  width: double.maxFinite,
+                  child: SingleChildScrollView(
+                    child: SelectableText(data['content']?.toString() ?? 'Contenu indisponible.'),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('Fermer'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -1007,11 +1099,29 @@ class _ExercisePageState extends State<ExercisePage> {
   }
 
   Future<void> _saveGeneratedExercise(String content) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception('Connexion Firebase requise pour enregistrer l’exercice.');
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts').add({
-      'type': 'exercise', 'course': widget.course.name, 'content': content, 'difficulty': _difficulty, 'createdAt': FieldValue.serverTimestamp(),
+    final prefs = await SharedPreferences.getInstance();
+    List<dynamic> saved = [];
+    try {
+      final raw = prefs.getString('studyArtifacts');
+      if (raw != null) saved = jsonDecode(raw) as List<dynamic>;
+    } catch (_) {}
+    saved.insert(0, {
+      'type': 'exercise', 'course': widget.course.name, 'content': content,
+      'difficulty': _difficulty, 'createdAt': DateTime.now().toIso8601String(),
     });
+    if (saved.length > 100) saved = saved.take(100).toList();
+    await prefs.setString('studyArtifacts', jsonEncode(saved));
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts').add({
+          'type': 'exercise', 'course': widget.course.name, 'content': content, 'difficulty': _difficulty, 'createdAt': FieldValue.serverTimestamp(),
+        });
+      } catch (error) {
+        debugPrint('StudyMind exercise cloud archive failed; local copy kept: $error');
+      }
+    }
   }
   Future<void> _generateAiExercise() async {
     if (_aiBusy) return;
@@ -1831,7 +1941,11 @@ class _AssistantChatPageState extends State<AssistantChatPage> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('Connecte-toi à ton compte Firebase.');
-      await _saveChatMessage('user', question);
+      try {
+        await _saveChatMessage('user', question);
+      } catch (error) {
+        debugPrint('StudyMind user chat message not saved to cloud: $error');
+      }
       final token = await user.getIdToken(true);
       final response = await http.post(Uri.parse('$workerUrl/api/chat'),
         headers: {'Content-Type':'application/json','Authorization':'Bearer $token'},
@@ -1848,7 +1962,11 @@ class _AssistantChatPageState extends State<AssistantChatPage> {
       }
       final answer = data['answer']?.toString() ?? '';
       if (answer.isEmpty) throw Exception('Gemini a renvoyé une réponse vide.');
-      await _saveChatMessage('assistant', answer);
+      try {
+        await _saveChatMessage('assistant', answer);
+      } catch (error) {
+        debugPrint('StudyMind assistant chat message not saved to cloud: $error');
+      }
       if (mounted) setState(() => _messages.add({'role':'assistant','text':answer}));
     } catch (e) { if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ','')); }
     if (mounted) setState(() => _sending = false);
