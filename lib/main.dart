@@ -1141,7 +1141,7 @@ class _ExercisePageState extends State<ExercisePage> {
       // Ne pas perdre l'exercice généré si l'archivage Firestore échoue.
       try { await _saveGeneratedExercise(generated); }
       catch (saveError) { debugPrint('StudyMind exercice non archivé : $saveError'); }
-      final marker = RegExp(r'(?im)^\s*(?:#+\s*)?CORRECTION(?:\s+DÉTAILLÉE)?\s*:?').firstMatch(generated);
+      final marker = RegExp(r'^\s*(?:#+\s*)?CORRECTION(?:\s+DÉTAILLÉE)?\s*:?', multiLine: true, caseSensitive: false).firstMatch(generated);
       final question = marker == null ? generated : generated.substring(0, marker.start).trim();
       if (mounted && question.isNotEmpty) setState(() { _generatedQuestion = question; });
     } catch (error) {
@@ -1158,7 +1158,12 @@ class _ExercisePageState extends State<ExercisePage> {
       return 'Une entreprise achète des marchandises pour 100 000 FC à crédit. Quels éléments faut-il débiter et créditer dans l’écriture ?';
     }
     if (name.contains('math')) {
-      return 'Résous l’équation suivante et explique brièvement ton calcul : 2x + 4 = 10.';
+      final lesson = widget.course.content.toLowerCase();
+      if ((lesson.contains('addition') || lesson.contains('somme')) &&
+          (lesson.contains('nombre rond') || lesson.contains('nombres ronds') || lesson.contains('centaine') || lesson.contains('dizaine'))) {
+        return 'Calcule 300 + 400, puis explique comment tu as additionné ces nombres ronds.';
+      }
+      return 'À partir de la leçon fournie, résous un calcul portant uniquement sur la notion étudiée et explique brièvement ta méthode.';
     }
     if (name.contains('histoire')) {
       return 'Cite une cause majeure de la Première Guerre mondiale et explique brièvement son rôle.';
@@ -1180,9 +1185,12 @@ class _ExercisePageState extends State<ExercisePage> {
     }
 
     if (name.contains('math')) {
-      return RegExp(r'\b3\b').hasMatch(answer) ||
-          answer.contains('x=3') ||
-          answer.contains('x = 3');
+      final lesson = widget.course.content.toLowerCase();
+      if ((lesson.contains('addition') || lesson.contains('somme')) &&
+          (lesson.contains('nombre rond') || lesson.contains('nombres ronds') || lesson.contains('centaine') || lesson.contains('dizaine'))) {
+        return answer.contains('700') || answer.contains('sept cents') || answer.contains('sept cent');
+      }
+      return answer.isNotEmpty;
     }
 
     if (name.contains('histoire')) {
