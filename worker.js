@@ -119,7 +119,7 @@ export default {
             ? "Crée une fiche de révision complète et pédagogique avec titre, objectifs, notions clés, définitions, explications, exemples et mini-récapitulatif."
             : "Fais un résumé fidèle, clair et structuré du cours avec les idées essentielles.";
         } else if (task === "exercise") {
-          prompt = "Crée un exercice original basé uniquement sur le cours. Respecte la difficulté demandée. Donne la consigne, les données utiles et une correction détaillée dans une section séparée intitulée CORRECTION (à ne pas confondre avec la consigne).";
+          prompt = "Crée un exercice original strictement limité aux notions réellement expliquées dans le cours fourni. Avant de rédiger, identifie le sujet précis de la leçon et reste dans ce sujet : ne mélange jamais avec d’autres chapitres de la même matière et n’introduis aucune notion non enseignée. Pour un cours de mathématiques sur l’addition des nombres ronds, propose uniquement des additions de nombres ronds adaptées au niveau du cours (par exemple dizaines ou centaines rondes) : aucun x, aucune inconnue, aucune équation, aucune multiplication ni autre opération si elles ne figurent pas dans le cours. Respecte la difficulté demandée. Donne une consigne claire, les données utiles, puis une correction détaillée dans une section séparée intitulée CORRECTION. La réponse doit pouvoir être résolue en appliquant directement la leçon fournie.";
         } else {
           prompt = "Corrige la réponse de l'élève à partir du cours. Explique ce qui est juste, ce qui manque ou est faux, puis donne une réponse modèle. Termine par une ligne exactement au format RESULTAT: BONNE ou RESULTAT: A_REVOIR. N'accorde pas automatiquement la réussite.";
         }
