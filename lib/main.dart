@@ -591,7 +591,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
       catch (saveError) { debugPrint('StudyMind fiche non archivée : $saveError'); }
       if (!mounted) return;
       _navigatorKey.currentState?.pop();
-      showDialog(context: _navigatorKey.currentContext!, builder: (ctx) => AlertDialog(title: Text('Fiche IA • ${course.name}'), content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: SelectableText(generated))), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fermer'))]));
+      showDialog(context: _navigatorKey.currentContext!, builder: (ctx) => AlertDialog(title: Text('Fiche IA • ${course.name}'), content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: SelectableText(generated))), actions: [TextButton(onPressed: () { Navigator.pop(ctx); _navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const StudyArtifactArchivePage())); }, child: const Text('Mes documents')), TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fermer'))]));
     } catch (error) {
       if (!mounted) return;
       _navigatorKey.currentState?.pop();
