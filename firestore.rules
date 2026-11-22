@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    function isFounder() { return signedIn() && request.auth.uid == 'REPLACE_WITH_FOUNDER_UID'; }
+    function isFounder() { return signedIn() && request.auth.uid == 'npOeGPmuHXQtQbkJZqcJwWz71y62'; }
     function isAdmin() { return signedIn() && request.auth.token.studymindAdmin == true; }
 
     match /users/{userId} {
