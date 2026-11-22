@@ -100,10 +100,12 @@ jobs:
 
       - name: Tester installation réelle sur émulateur Android 13
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ANDROID_I_WANT_MY_TCG: "yes"
         with:
           api-level: 33
           arch: x86_64
-          profile: pixel_6
+          profile: pixel_2
           script: |
             set -euo pipefail
             adb install -r build/app/outputs/flutter-apk/app-release.apk
