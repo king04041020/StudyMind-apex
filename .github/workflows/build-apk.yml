@@ -1,4 +1,5 @@
 name: Build APK StudyMind Apex
+# Public release publishing follows the validated APK artifact.
 
 on:
   workflow_dispatch:
