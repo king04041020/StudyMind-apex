@@ -63,7 +63,16 @@ jobs:
           unzip -t "$APK"
           # Re-signer explicitement avec les schémas Android v1 et v2 pour
           # maximiser la compatibilité avec les installateurs des téléphones.
-          test -f "$HOME/.android/debug.keystore"
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
           BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           "$BUILD_TOOLS/apksigner" sign --ks "$HOME/.android/debug.keystore" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --v1-signing-enabled true --v2-signing-enabled true "$APK"
           "$BUILD_TOOLS/zipalign" -c -v 4 "$APK"
