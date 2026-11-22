@@ -75,24 +75,3 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 7
-
-      - name: Tester installation sur emulateur Android 13
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 33
-          arch: x86_64
-          profile: pixel_2
-          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
-          disable-animations: true
-          script: |
-            adb install -r build/app/outputs/flutter-apk/app-release.apk
-            adb shell pm path com.studymind.app
-            adb uninstall com.studymind.app
-
-      - name: Publier le fichier APK
-        uses: actions/upload-artifact@v5
-        with:
-          name: StudyMind-Apex-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
-          retention-days: 7
