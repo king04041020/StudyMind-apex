@@ -20,8 +20,9 @@ export default {
     // avant le timeout HTTP du client.
     const callGemini = async (payload, apiKey) => {
       const plan = [
-        { model: "gemini-3.8-flash", attempts: 1 },
-        { model: "gemini-3.5-flash-lite", attempts: 2 }
+        // Modèles Gemini stables et disponibles pour éviter les erreurs 404.
+        { model: "gemini-2.5-flash", attempts: 1 },
+        { model: "gemini-2.5-flash-lite", attempts: 2 }
       ];
       let last = {
         ok: false, status: 503,
@@ -135,8 +136,13 @@ export default {
           console.error("StudyMind Gemini generation error", generated.status, generated.model, detail);
           return respond({ error: `Gemini (HTTP ${generated.status}) : ${String(detail).slice(0, 700)}` }, 502);
         }
-        const content = generatedData.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("\n").trim();
+        let content = generatedData.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("\n").trim();
         if (!content) return respond({ error: "Gemini n'a renvoyé aucun contenu." }, 502);
+        // Une correction doit toujours fournir un verdict explicite. En cas de
+        // format manquant, on choisit prudemment A_REVOIR et aucun PR n'est attribué.
+        if (task === "correction" && !/^RESULTAT\\s*:\\s*(?:BONNE|A_REVOIR)\\s*$/im.test(content)) {
+          content = content.replace(/\\s*$/, "") + "\\nRESULTAT: A_REVOIR";
+        }
         return respond({ content, model: generated.model });
       }
       const message = String(body.message || "").trim();
