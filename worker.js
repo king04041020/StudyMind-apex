@@ -20,9 +20,9 @@ export default {
     // avant le timeout HTTP du client.
     const callGemini = async (payload, apiKey) => {
       const plan = [
-        // Modèles Gemini stables et disponibles pour éviter les erreurs 404.
-        { model: "gemini-2.5-flash", attempts: 1 },
-        { model: "gemini-2.5-flash-lite", attempts: 2 }
+        // Modèle stable recommandé par Google, avec un fallback Flash-Lite actuel.
+        { model: "gemini-3.8-flash", attempts: 1 },
+        { model: "gemini-3.5-flash-lite", attempts: 2 }
       ];
       let last = {
         ok: false, status: 503,
