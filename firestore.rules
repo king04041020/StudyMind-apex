@@ -16,6 +16,12 @@ service cloud.firestore {
         allow read, write: if signedIn() && request.auth.uid == userId
           && subcollection != 'roles';
       }
+      // Autorise les sous-collections imbriquées appartenant au même utilisateur
+      // (ex. assistantChats/main/messages/{messageId}), sans ouvrir les données d'autrui.
+      match /{subcollection}/{nestedPath=**} {
+        allow read, write: if signedIn() && request.auth.uid == userId
+          && subcollection != 'roles';
+      }
     }
     match /adminCandidates/{candidateId} {
       allow read: if isFounder() || isAdmin() || (signedIn() && request.auth.uid == candidateId);
