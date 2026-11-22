@@ -61,9 +61,15 @@ jobs:
           test -s "$APK"
           file "$APK"
           unzip -t "$APK"
+          # Re-signer explicitement avec les schémas Android v1 et v2 pour
+          # maximiser la compatibilité avec les installateurs des téléphones.
+          test -f "$HOME/.android/debug.keystore"
           BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          "$BUILD_TOOLS/apksigner" sign --ks "$HOME/.android/debug.keystore" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --v1-signing-enabled true --v2-signing-enabled true "$APK"
           "$BUILD_TOOLS/zipalign" -c -v 4 "$APK"
-          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/apk-signature.txt
+          grep -F "Verified using v1 scheme (JAR signing): true" /tmp/apk-signature.txt
+          grep -F "Verified using v2 scheme (APK Signature Scheme v2): true" /tmp/apk-signature.txt
           "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest application-id "$APK" | grep -Fx "com.studymind.app"
           "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest min-sdk "$APK"
           "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest target-sdk "$APK"
