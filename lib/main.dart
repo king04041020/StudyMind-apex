@@ -1,5 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:image_picker/image_picker.dart';
+import 'package:printing/printing.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
@@ -217,7 +220,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
     final response = await http.post(Uri.parse('https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate'),
       headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
       body: jsonEncode({'task': task, 'course': course.name, 'text': course.content, 'answer': answer, 'difficulty': difficulty}),
-    ).timeout(const Duration(seconds: 90));
+    ).timeout(const Duration(seconds: 100));
     Map<String, dynamic> data;
     try {
       final decoded = jsonDecode(response.body);
@@ -1208,7 +1211,7 @@ class _ExercisePageState extends State<ExercisePage> {
       Uri.parse('https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate'),
       headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
       body: jsonEncode({'task': task, 'course': widget.course.name, 'text': widget.course.content, 'answer': answer, 'difficulty': _difficulty}),
-    ).timeout(const Duration(seconds: 90));
+    ).timeout(const Duration(seconds: 100));
     Map<String, dynamic> data;
     try {
       final decoded = jsonDecode(response.body);
@@ -2120,7 +2123,7 @@ class _AssistantChatPageState extends State<AssistantChatPage> {
       final token = await user.getIdToken(true);
       final response = await http.post(Uri.parse('$workerUrl/api/chat'),
         headers: {'Content-Type':'application/json','Authorization':'Bearer $token'},
-        body: jsonEncode({'message':question,'mode':widget.mode,'style':widget.style,'course':widget.course,'assistantName':widget.assistantName,'context':widget.courseContext})).timeout(const Duration(seconds: 45));
+        body: jsonEncode({'message':question,'mode':widget.mode,'style':widget.style,'course':widget.course,'assistantName':widget.assistantName,'context':widget.courseContext})).timeout(const Duration(seconds: 70));
       Map<String, dynamic> data;
       try {
         final decoded = jsonDecode(response.body);
