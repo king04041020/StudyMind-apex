@@ -177,7 +177,9 @@ class _StudyMindAppState extends State<StudyMindApp> {
       final raw = prefs.getString('studyArtifacts');
       if (raw != null) saved = jsonDecode(raw) as List<dynamic>;
     } catch (_) {}
+    final artifactId = 'artifact-${DateTime.now().microsecondsSinceEpoch}';
     saved.insert(0, {
+      'id': artifactId,
       'type': type, 'course': course.name, 'content': content,
       'createdAt': DateTime.now().toIso8601String(),
     });
@@ -187,8 +189,8 @@ class _StudyMindAppState extends State<StudyMindApp> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     try {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts').add({
-        'type': type, 'course': course.name, 'content': content, 'createdAt': FieldValue.serverTimestamp(),
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts').doc(artifactId).set({
+        'id': artifactId, 'type': type, 'course': course.name, 'content': content, 'createdAt': FieldValue.serverTimestamp(),
       });
     } catch (error) {
       debugPrint('StudyMind archive cloud save failed; local copy kept: $error');
@@ -494,7 +496,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
             const SizedBox(height: 10),
             Text('Matière : ${quest['course'] ?? 'Cours'}', style: const TextStyle(color: systemBlue)),
             const SizedBox(height: 12),
-            TextField(controller: answerController, maxLines: 5, enabled: !checking, decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Explique ce que tu as fait ou réponds à la consigne…')),
+            TextField(controller: answerController, maxLines: 5, enabled: !checking, onChanged: (_) => setDialogState(() {}), decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Explique ce que tu as fait ou réponds à la consigne…')),
             if (feedback.isNotEmpty) ...[const SizedBox(height: 10), Text(feedback, style: const TextStyle(color: Colors.orangeAccent))],
             if (checking) const Padding(padding: EdgeInsets.only(top: 10), child: LinearProgressIndicator()),
           ])),
@@ -1075,7 +1077,7 @@ class _StudyArtifactArchivePageState extends State<StudyArtifactArchivePage> {
           if (_selectionMode) IconButton(tooltip: 'Supprimer la sélection', onPressed: _selected.isEmpty ? null : _deleteSelected, icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
         ],
       ),
-      body: user == null ? _buildArtifactList(_buildCombined(const [])) : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      body: user == null ? _buildLocalArtifactList() : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: stream,
         builder: (context, snapshot) {
           final cloud = snapshot.hasData ? snapshot.data!.docs.map((doc) => <String,dynamic>{...doc.data(), '_cloudId':doc.id}) : <Map<String,dynamic>>[];
@@ -1087,6 +1089,12 @@ class _StudyArtifactArchivePageState extends State<StudyArtifactArchivePage> {
         },
       ),
     );
+  }
+
+  Widget _buildLocalArtifactList() {
+    final combined = _buildCombined(const []);
+    _visibleDocs = combined;
+    return _buildArtifactList(combined);
   }
 
   List<Map<String,dynamic>> _buildCombined(List<Map<String,dynamic>> cloud) {
@@ -1195,7 +1203,9 @@ class _ExercisePageState extends State<ExercisePage> {
       final raw = prefs.getString('studyArtifacts');
       if (raw != null) saved = jsonDecode(raw) as List<dynamic>;
     } catch (_) {}
+    final artifactId = 'artifact-${DateTime.now().microsecondsSinceEpoch}';
     saved.insert(0, {
+      'id': artifactId,
       'type': 'exercise', 'course': widget.course.name, 'content': content,
       'difficulty': _difficulty, 'createdAt': DateTime.now().toIso8601String(),
     });
@@ -1205,8 +1215,8 @@ class _ExercisePageState extends State<ExercisePage> {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       try {
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts').add({
-          'type': 'exercise', 'course': widget.course.name, 'content': content, 'difficulty': _difficulty, 'createdAt': FieldValue.serverTimestamp(),
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts').doc(artifactId).set({
+          'id': artifactId, 'type': 'exercise', 'course': widget.course.name, 'content': content, 'difficulty': _difficulty, 'createdAt': FieldValue.serverTimestamp(),
         });
       } catch (error) {
         debugPrint('StudyMind exercise cloud archive failed; local copy kept: $error');
