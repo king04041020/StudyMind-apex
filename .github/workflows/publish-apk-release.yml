@@ -19,7 +19,7 @@ jobs:
       - name: Download validated APK artifact
         uses: actions/download-artifact@v5
         with:
-          name: Kavelynt-APK
+          name: Kavelynt-Apex-APK
           path: release
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
