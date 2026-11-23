@@ -1,5 +1,5 @@
 {
-  "name": "studymind-apex-functions",
+  "name": "kavelynt-functions",
   "private": true,
   "main": "lib/index.js",
   "engines": { "node": "20" },
