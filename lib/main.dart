@@ -17,7 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  runApp(const StudyMindApp());
+  runApp(const KavelyntApp());
 }
 
 const Color systemBlue = Color(0xFF36BFFF);
@@ -37,14 +37,14 @@ bool _hasPositiveAiVerdict(String output) {
       lastLine.toUpperCase() == 'RESULTAT: BONNE';
 }
 
-class StudyMindApp extends StatefulWidget {
-  const StudyMindApp({super.key});
+class KavelyntApp extends StatefulWidget {
+  const KavelyntApp({super.key});
 
   @override
-  State<StudyMindApp> createState() => _StudyMindAppState();
+  State<KavelyntApp> createState() => _KavelyntAppState();
 }
 
-class _StudyMindAppState extends State<StudyMindApp> {
+class _KavelyntAppState extends State<KavelyntApp> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   final GlobalKey<ScaffoldMessengerState> _messengerKey = GlobalKey<ScaffoldMessengerState>();
   int _points = 0;
@@ -172,7 +172,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
         await ref.set(_cloudState(), SetOptions(merge: true));
       }
       await _ensureAiQuests();
-    } catch (error) { _cloudUid = null; debugPrint('StudyMind cloud sync failed: $error'); }
+    } catch (error) { _cloudUid = null; debugPrint('Kavelynt cloud sync failed: $error'); }
   }
 
   Map<String, dynamic> _cloudState() => {
@@ -209,7 +209,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
         'id': artifactId, 'type': type, 'course': course.name, 'content': content, 'createdAt': FieldValue.serverTimestamp(),
       });
     } catch (error) {
-      debugPrint('StudyMind archive cloud save failed; local copy kept: $error');
+      debugPrint('Kavelynt archive cloud save failed; local copy kept: $error');
     }
   }
   Future<String> _generateStudyContent({required String task, required Course course, String answer = '', String difficulty = 'Moyen'}) async {
@@ -262,7 +262,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
         await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('appData').doc('main').set({
           ..._cloudState(),
         }, SetOptions(merge: true));
-      } catch (error) { debugPrint('StudyMind cloud save failed: $error'); }
+      } catch (error) { debugPrint('Kavelynt cloud save failed: $error'); }
     }
   }
 
@@ -312,7 +312,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'StudyMind',
+      title: 'Kavelynt',
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: scheme,
@@ -453,7 +453,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
     try {
       final raw = await _generateStudyContent(
         task: 'quests',
-        course: Course(name: 'Toutes les matières', detail: 'Quêtes StudyMind', icon: Icons.assignment, content: source),
+        course: Course(name: 'Toutes les matières', detail: 'Quêtes Kavelynt', icon: Icons.assignment, content: source),
       );
       final cleaned = raw.replaceFirst(RegExp(r'^\s*\x60\x60\x60(?:json)?\s*'), '').replaceFirst(RegExp(r'\s*\x60\x60\x60\s*$'), '').trim();
       final decoded = jsonDecode(cleaned);
@@ -462,7 +462,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
       final generationId = DateTime.now().microsecondsSinceEpoch;
       final items = <Map<String,String>>[];
       for (final quest in quests.whereType<Map>()) {
-        final title = quest['title']?.toString() ?? 'Mission StudyMind';
+        final title = quest['title']?.toString() ?? 'Mission Kavelynt';
         final parsedReward = int.tryParse(quest['reward']?.toString() ?? '') ?? 5;
         items.add({
           'id': 'quest-$generationId-${items.length}',
@@ -705,14 +705,14 @@ class _StudyMindAppState extends State<StudyMindApp> {
       final document = PdfDocument();
       try {
         final page = document.pages.add();
-        final printable = 'StudyMind • ${course.name}\nFEUILLE D’EXERCICES\n\n$content\n\nNom : __________________________    Date : ______________';
+        final printable = 'Kavelynt • ${course.name}\nFEUILLE D’EXERCICES\n\n$content\n\nNom : __________________________    Date : ______________';
         PdfTextElement(text: printable, font: PdfStandardFont(PdfFontFamily.helvetica, 11)).draw(
           page: page,
           bounds: Rect.fromLTWH(36, 36, page.getClientSize().width - 72, page.getClientSize().height - 72),
           format: PdfLayoutFormat(layoutType: PdfLayoutType.paginate),
         );
         final bytes = Uint8List.fromList(await document.save());
-        await Printing.layoutPdf(name: 'StudyMind-exercices.pdf', onLayout: (_) async => bytes);
+        await Printing.layoutPdf(name: 'Kavelynt-exercices.pdf', onLayout: (_) async => bytes);
       } finally {
         document.dispose();
       }
@@ -778,7 +778,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
       // L'affichage ne dépend pas des règles Firestore : conserver la fiche même
       // si son archivage cloud échoue.
       try { await _saveStudyArtifact('revision', course, generated); }
-      catch (saveError) { debugPrint('StudyMind fiche non archivée : $saveError'); }
+      catch (saveError) { debugPrint('Kavelynt fiche non archivée : $saveError'); }
       if (!mounted) return;
       _navigatorKey.currentState?.pop();
       showDialog(context: _navigatorKey.currentContext!, builder: (ctx) => AlertDialog(title: Text('Fiche IA • ${course.name}'), content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: SelectableText(generated))), actions: [TextButton(onPressed: () { Navigator.pop(ctx); _navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const StudyArtifactArchivePage())); }, child: const Text('Mes documents')), TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fermer'))]));
@@ -878,7 +878,7 @@ class _Dashboard extends StatelessWidget {
             const Icon(Icons.blur_on, color: systemBlue, size: 30),
             const SizedBox(width: 8),
             const Text(
-              'STUDYMIND',
+              'KAVELYNT',
               style: TextStyle(
                 fontWeight: FontWeight.w900,
                 letterSpacing: 2,
@@ -1135,7 +1135,7 @@ class _StudyArtifactArchivePageState extends State<StudyArtifactArchivePage> {
       final raw = prefs.getString('studyArtifacts');
       final decoded = raw == null ? <dynamic>[] : jsonDecode(raw) as List<dynamic>;
       if (mounted) setState(() => _localArtifacts = decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList());
-    } catch (error) { debugPrint('StudyMind local archive load failed: $error'); }
+    } catch (error) { debugPrint('Kavelynt local archive load failed: $error'); }
   }
 
   Future<void> _deleteOne(Map<String, dynamic> document) async {
@@ -1334,7 +1334,7 @@ class _ExercisePageState extends State<ExercisePage> {
           'id': artifactId, 'type': 'exercise', 'course': widget.course.name, 'content': content, 'difficulty': _difficulty, 'createdAt': FieldValue.serverTimestamp(),
         });
       } catch (error) {
-        debugPrint('StudyMind exercise cloud archive failed; local copy kept: $error');
+        debugPrint('Kavelynt exercise cloud archive failed; local copy kept: $error');
       }
     }
   }
@@ -1355,7 +1355,7 @@ class _ExercisePageState extends State<ExercisePage> {
       final generated = await _callStudyAi('exercise');
       // Ne pas perdre l'exercice généré si l'archivage Firestore échoue.
       try { await _saveGeneratedExercise(generated); }
-      catch (saveError) { debugPrint('StudyMind exercice non archivé : $saveError'); }
+      catch (saveError) { debugPrint('Kavelynt exercice non archivé : $saveError'); }
       final marker = RegExp(r'^\s*(?:#+\s*)?CORRECTION(?:\s+DÉTAILLÉE)?\s*:?', multiLine: true, caseSensitive: false).firstMatch(generated);
       final question = marker == null ? generated : generated.substring(0, marker.start).trim();
       if (mounted && question.isNotEmpty) setState(() { _generatedQuestion = question; });
@@ -2121,7 +2121,7 @@ class _FirebaseLoginPageState extends State<FirebaseLoginPage> {
     body: Center(child: SingleChildScrollView(padding: const EdgeInsets.all(24), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 420), child: Column(
       mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Icon(Icons.auto_awesome, color: systemBlue, size: 54),
-        const SizedBox(height: 16), const Text('STUDYMIND', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: 3)),
+        const SizedBox(height: 16), const Text('KAVELYNT', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: 3)),
         const SizedBox(height: 8), Text(_register ? 'Créer ton compte' : 'Connexion Firebase', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
         const SizedBox(height: 24),
         TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Adresse e-mail', border: OutlineInputBorder())),
@@ -2178,7 +2178,7 @@ class _AssistantChatPageState extends State<AssistantChatPage> {
         }));
       });
     } catch (error) {
-      debugPrint('StudyMind chat history load failed: $error');
+      debugPrint('Kavelynt chat history load failed: $error');
       if (mounted) setState(() => _error = 'Historique non chargé : vérifie ta connexion.');
     } finally {
       if (mounted) setState(() => _loadingHistory = false);
@@ -2202,7 +2202,7 @@ class _AssistantChatPageState extends State<AssistantChatPage> {
       try {
         await _saveChatMessage('user', question);
       } catch (error) {
-        debugPrint('StudyMind user chat message not saved to cloud: $error');
+        debugPrint('Kavelynt user chat message not saved to cloud: $error');
       }
       final token = await user.getIdToken(true);
       final response = await http.post(Uri.parse('$workerUrl/api/chat'),
@@ -2223,7 +2223,7 @@ class _AssistantChatPageState extends State<AssistantChatPage> {
       try {
         await _saveChatMessage('assistant', answer);
       } catch (error) {
-        debugPrint('StudyMind assistant chat message not saved to cloud: $error');
+        debugPrint('Kavelynt assistant chat message not saved to cloud: $error');
       }
       if (mounted) setState(() => _messages.add({'role':'assistant','text':answer}));
     } catch (e) { if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ','')); }
@@ -2243,7 +2243,7 @@ class _AssistantChatPageState extends State<AssistantChatPage> {
           if (navigator.canPop()) navigator.pop();
         },
       ),
-      title: Text('StudyMind • ${widget.assistantName}'),
+      title: Text('Kavelynt • ${widget.assistantName}'),
       actions: const [],
     ),
     body: Column(children:[
