@@ -220,9 +220,20 @@ export default {
           }
         }
         if (!generated.ok) {
-          const detail = generatedData.error?.message || generatedData.message || generatedData._raw || "Réponse Gemini invalide.";
+          const detail = generatedData.error?.message || generatedData.message || generatedData._raw || "Réponse du fournisseur IA invalide.";
           console.error("Kavelynt Gemini generation error", generated.status, generated.model, detail);
-          return respond({ error: `Gemini (HTTP ${generated.status}) : ${String(detail).slice(0, 700)}` }, 502);
+          if (generated.status === 429) {
+            return respond({
+              error: "Le quota temporaire du service IA est atteint. Réessaie plus tard.",
+              code: "AI_QUOTA_EXCEEDED",
+              retryable: true
+            }, 429);
+          }
+          return respond({
+            error: "La génération IA est momentanément indisponible. Réessaie dans quelques instants.",
+            code: "AI_PROVIDER_UNAVAILABLE",
+            retryable: true
+          }, 503);
         }
         let content = generatedData.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("\n").trim();
         if (!content) return respond({ error: "Gemini n'a renvoyé aucun contenu." }, 502);
@@ -270,9 +281,20 @@ export default {
       }, geminiApiKey);
       const result = aiResponse.data;
       if (!aiResponse.ok) {
-        const detail = result.error?.message || result.message || result._raw || "Réponse Gemini invalide.";
+        const detail = result.error?.message || result.message || result._raw || "Réponse du fournisseur IA invalide.";
         console.error("Kavelynt Gemini chat error", aiResponse.status, aiResponse.model, detail);
-        return respond({ error: `Gemini (HTTP ${aiResponse.status}) : ${String(detail).slice(0, 700)}` }, 502);
+        if (aiResponse.status === 429) {
+          return respond({
+            error: "Le quota temporaire du service IA est atteint. Réessaie plus tard.",
+            code: "AI_QUOTA_EXCEEDED",
+            retryable: true
+          }, 429);
+        }
+        return respond({
+          error: "L’assistant IA est momentanément indisponible. Réessaie dans quelques instants.",
+          code: "AI_PROVIDER_UNAVAILABLE",
+          retryable: true
+        }, 503);
       }
       const answer = result.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("").trim();
       if (!answer) return respond({ error: "Réponse IA indisponible" }, 502);
