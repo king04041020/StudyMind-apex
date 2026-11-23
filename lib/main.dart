@@ -20,9 +20,11 @@ Future<void> main() async {
   runApp(const KavelyntApp());
 }
 
-const Color systemBlue = Color(0xFF36BFFF);
-const Color deepBlue = Color(0xFF071321);
-const Color panelBlue = Color(0xFF0D2033);
+const Color systemBlue = Color(0xFFB45CFF);
+const Color deepBlue = Color(0xFF070311);
+const Color panelBlue = Color(0xFF140A2A);
+const Color kavelyntGold = Color(0xFFFFC83D);
+const Color kavelyntPurple = Color(0xFF8B2CFF);
 
 bool _hasPositiveAiVerdict(String output) {
   final matches = RegExp(
@@ -331,7 +333,7 @@ class _KavelyntAppState extends State<KavelyntApp> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid != null && _cloudUid != uid) { Future.microtask(_syncCloudCourses); }
     final scheme = ColorScheme.fromSeed(
-      seedColor: systemBlue,
+      seedColor: kavelyntPurple,
       brightness: Brightness.dark,
       surface: deepBlue,
     );
@@ -986,167 +988,88 @@ class _RankPromotionDialogState extends State<_RankPromotionDialog>
 }
 
 class _Dashboard extends StatelessWidget {
-  const _Dashboard({
-    required this.points,
-    required this.rank,
-    required this.nextRankAt,
-    required this.courses,
-    required this.onOpenCourses,
-    required this.onOpenQuests,
-  });
-
-  final int points;
-  final int nextRankAt;
+  const _Dashboard({required this.points, required this.rank, required this.nextRankAt, required this.courses, required this.onOpenCourses, required this.onOpenQuests});
+  final int points, nextRankAt;
   final String rank;
   final List<Course> courses;
-  final VoidCallback onOpenCourses;
-  final VoidCallback onOpenQuests;
+  final VoidCallback onOpenCourses, onOpenQuests;
 
   @override
   Widget build(BuildContext context) {
-    final previousRankAt = _previousThreshold(points);
-    final progress = points >= 5000
-        ? 1.0
-        : ((points - previousRankAt) / (nextRankAt - previousRankAt))
-            .clamp(0.0, 1.0);
-
-    return ListView(
-      padding: const EdgeInsets.all(18),
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.blur_on, color: systemBlue, size: 30),
-            const SizedBox(width: 8),
-            const Text(
-              'KAVELYNT',
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                letterSpacing: 2,
-                fontSize: 19,
-              ),
-            ),
-            const Spacer(),
-            _tag('SYSTEM ONLINE'),
-          ],
-        ),
-        const SizedBox(height: 22),
-        _panel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'STATUT DU CHASSEUR',
-                style: TextStyle(
-                  color: systemBlue,
-                  letterSpacing: 1.5,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'RANG $rank',
-                    style: const TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '$points PR',
-                    style: const TextStyle(
-                      color: systemBlue,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 9,
-                  backgroundColor: Colors.white12,
-                  color: systemBlue,
-                ),
-              ),
-              const SizedBox(height: 7),
-              Text(
-                points >= 5000
-                    ? 'Rang maximal atteint'
-                    : '${nextRankAt - points} PR avant le prochain rang',
-                style: const TextStyle(color: Colors.white60, fontSize: 12),
-              ),
-            ],
+    final previous = _previousThreshold(points);
+    final progress = points >= 5000 ? 1.0 : ((points - previous) / (nextRankAt - previous)).clamp(0.0, 1.0);
+    final remaining = points >= 5000 ? 0 : nextRankAt - points;
+    return Container(
+      decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter,end: Alignment.bottomCenter,colors:[Color(0xFF100522),Color(0xFF070311),Color(0xFF030109)])),
+      child: Stack(children:[
+        Positioned(top:20,right:-60,child:_orb(200,kavelyntPurple)),
+        Positioned(top:360,left:-70,child:_orb(190,const Color(0xFF5B16D6))),
+        ListView(padding:const EdgeInsets.fromLTRB(18,14,18,30),children:[
+          Row(children:[
+            Container(width:48,height:48,decoration:BoxDecoration(borderRadius:BorderRadius.circular(15),gradient:const LinearGradient(colors:[Color(0xFF4A00C8),Color(0xFFB000FF)]),boxShadow:[BoxShadow(color:kavelyntPurple.withOpacity(.5),blurRadius:20)]),child:const Icon(Icons.auto_awesome,color:Colors.white,size:29)),
+            const SizedBox(width:12),
+            const Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('Kavelynt',style:TextStyle(fontSize:22,fontWeight:FontWeight.w900,color:Colors.white)),Text('Apprendre • Réviser • Réussir',style:TextStyle(color:Color(0xFFB98BFF),fontSize:11,fontWeight:FontWeight.w600))])),
+            _pill(Icons.workspace_premium,'Rang $rank',kavelyntPurple),
+            const SizedBox(width:6),
+            _pill(Icons.star_rounded,'$points XP',kavelyntGold),
+          ]),
+          const SizedBox(height:22),
+          Container(padding:const EdgeInsets.all(20),decoration:BoxDecoration(borderRadius:BorderRadius.circular(28),gradient:const LinearGradient(begin:Alignment.topLeft,end:Alignment.bottomRight,colors:[Color(0xFF241044),Color(0xFF10051F),Color(0xFF090313)]),border:Border.all(color:kavelyntPurple.withOpacity(.8)),boxShadow:[BoxShadow(color:kavelyntPurple.withOpacity(.22),blurRadius:28),BoxShadow(color:kavelyntGold.withOpacity(.08),blurRadius:35)]),
+            child:Column(children:[
+              Row(children:[
+                Container(width:62,height:62,decoration:BoxDecoration(shape:BoxShape.circle,color:kavelyntPurple.withOpacity(.18),border:Border.all(color:kavelyntGold,width:1.5)),child:const Icon(Icons.workspace_premium,color:kavelyntGold,size:36)),
+                const SizedBox(width:14),
+                Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                  const Text('TON RANG ACTUEL',style:TextStyle(color:Color(0xFFC49AFF),fontSize:11,letterSpacing:1.5,fontWeight:FontWeight.bold)),
+                  Text('Rang $rank',style:const TextStyle(color:Colors.white,fontSize:23,fontWeight:FontWeight.w900)),
+                  Text(points>=5000?'Rang maximal atteint':'Encore $remaining XP pour progresser',style:const TextStyle(color:Color(0xFFBDA8D7),fontSize:11)),
+                ])),
+                const Icon(Icons.auto_awesome,color:kavelyntGold,size:30),
+              ]),
+              const SizedBox(height:20),
+              Container(width:116,height:116,decoration:BoxDecoration(shape:BoxShape.circle,gradient:const LinearGradient(colors:[Color(0xFFFFE28A),Color(0xFFFFA900),Color(0xFFB95B00)]),border:Border.all(color:const Color(0xFFFFF0B8),width:2),boxShadow:[BoxShadow(color:kavelyntGold.withOpacity(.65),blurRadius:28,spreadRadius:3),BoxShadow(color:kavelyntPurple.withOpacity(.7),blurRadius:35,spreadRadius:8)]),child:Center(child:Text(rank,style:const TextStyle(color:Color(0xFF35104F),fontSize:58,fontWeight:FontWeight.w900,shadows:[Shadow(color:Colors.white54,blurRadius:8)])))),
+              const SizedBox(height:12),
+              const Text('TON RANG • TON ASCENSION',style:TextStyle(color:kavelyntGold,fontSize:12,fontWeight:FontWeight.w900,letterSpacing:1.8)),
+              const SizedBox(height:18),
+              ClipRRect(borderRadius:BorderRadius.circular(30),child:Stack(children:[
+                Container(height:13,color:Colors.white.withOpacity(.09)),
+                FractionallySizedBox(widthFactor:progress,child:Container(height:13,decoration:const BoxDecoration(gradient:LinearGradient(colors:[Color(0xFF8B2CFF),Color(0xFFE04DFF),Color(0xFFFFC83D)])))),
+              ])),
+              const SizedBox(height:8),
+              Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[Text('$points XP',style:const TextStyle(color:Color(0xFFE6D5FF),fontSize:12,fontWeight:FontWeight.bold)),Text(points>=5000?'MAX':'$nextRankAt XP',style:const TextStyle(color:kavelyntGold,fontSize:12,fontWeight:FontWeight.bold))]),
+              const SizedBox(height:17),
+              Container(padding:const EdgeInsets.symmetric(horizontal:14,vertical:11),decoration:BoxDecoration(color:const Color(0xFF170A2B),borderRadius:BorderRadius.circular(16),border:Border.all(color:kavelyntGold.withOpacity(.8))),child:Row(mainAxisAlignment:MainAxisAlignment.center,children:[const Icon(Icons.bolt,color:kavelyntGold,size:20),const SizedBox(width:7),Text(points>=5000?'RANG SUPRÊME ATTEINT':'PROCHAIN OBJECTIF : $nextRankAt XP',style:const TextStyle(color:kavelyntGold,fontSize:11,fontWeight:FontWeight.w900,letterSpacing:.6))])),
+            ]),
           ),
-        ),
-        const SizedBox(height: 16),
-        _panel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'NOTIFICATION DU SYSTÈME',
-                style: TextStyle(
-                  color: systemBlue,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
-                ),
-              ),
-              const SizedBox(height: 9),
-              const Text(
-                'Bienvenue, chasseur.',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Ton aventure commence maintenant. Termine des exercices, accomplis des quêtes et fais évoluer ton rang.',
-                style: TextStyle(color: Colors.white70, height: 1.4),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        _sectionTitle('ACCÈS RAPIDE'),
-        Row(
-          children: [
-            Expanded(
-              child: _actionCard(
-                Icons.menu_book,
-                'Mes cours',
-                onOpenCourses,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _actionCard(
-                Icons.lock_open,
-                'Quêtes',
-                onOpenQuests,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        _sectionTitle('MES MATIÈRES'),
-        ...courses.take(3).map(
-              (course) => Card(
-                child: ListTile(
-                  leading: Icon(course.icon, color: systemBlue),
-                  title: Text(course.name),
-                  subtitle: Text(course.detail),
-                  trailing: const Icon(Icons.chevron_right),
-                ),
-              ),
-            ),
-      ],
+          const SizedBox(height:18),
+          Row(children:[
+            Expanded(child:_stat(Icons.menu_book_rounded,'${courses.length}','Matières',const Color(0xFFB76BFF))),
+            const SizedBox(width:9),
+            Expanded(child:_stat(Icons.star_rounded,'$points','XP gagnés',kavelyntGold)),
+            const SizedBox(width:9),
+            Expanded(child:_stat(Icons.local_fire_department_rounded,'∞','Progression',const Color(0xFFFF8B5B))),
+          ]),
+          const SizedBox(height:22),
+          const Text('TON PARCOURS',style:TextStyle(color:Color(0xFFC49AFF),fontSize:12,fontWeight:FontWeight.w900,letterSpacing:1.8)),
+          const SizedBox(height:12),
+          Row(children:[
+            Expanded(child:_feature(Icons.menu_book_rounded,'Mes cours','Apprendre et réviser',onOpenCourses)),
+            const SizedBox(width:12),
+            Expanded(child:_feature(Icons.flag_rounded,'Quêtes','Défis et récompenses',onOpenQuests)),
+          ]),
+          const SizedBox(height:20),
+          Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[const Text('MES MATIÈRES',style:TextStyle(color:Color(0xFFC49AFF),fontSize:12,fontWeight:FontWeight.w900,letterSpacing:1.8)),TextButton(onPressed:onOpenCourses,child:const Text('Tout voir',style:TextStyle(color:kavelyntGold)))]),
+          if(courses.isEmpty)_feature(Icons.add_circle_outline,'Ajouter une matière','Commence ton parcours',onOpenCourses)
+          else ...courses.take(3).map((course)=>Container(margin:const EdgeInsets.only(bottom:9),decoration:BoxDecoration(color:const Color(0xFF120822),borderRadius:BorderRadius.circular(17),border:Border.all(color:kavelyntPurple.withOpacity(.35))),child:ListTile(leading:Icon(course.icon,color:const Color(0xFFC18AFF)),title:Text(course.name,style:const TextStyle(color:Colors.white,fontWeight:FontWeight.bold)),subtitle:Text(course.detail,style:const TextStyle(color:Color(0xFFB6A5C9))),trailing:const Icon(Icons.chevron_right,color:kavelyntGold),onTap:onOpenCourses))),
+        ]),
+      ]),
     );
   }
+
+  Widget _pill(IconData icon,String label,Color color)=>Container(padding:const EdgeInsets.symmetric(horizontal:8,vertical:8),decoration:BoxDecoration(color:color.withOpacity(.13),borderRadius:BorderRadius.circular(24),border:Border.all(color:color.withOpacity(.65))),child:Row(mainAxisSize:MainAxisSize.min,children:[Icon(icon,size:14,color:color),const SizedBox(width:4),Text(label,style:TextStyle(color:color,fontSize:10,fontWeight:FontWeight.w900))]));
+  Widget _stat(IconData icon,String value,String label,Color color)=>Container(padding:const EdgeInsets.symmetric(vertical:14,horizontal:5),decoration:BoxDecoration(color:const Color(0xFF120822),borderRadius:BorderRadius.circular(16),border:Border.all(color:color.withOpacity(.35))),child:Column(children:[Icon(icon,color:color,size:22),const SizedBox(height:6),Text(value,style:const TextStyle(color:Colors.white,fontWeight:FontWeight.w900,fontSize:16)),Text(label,textAlign:TextAlign.center,style:const TextStyle(color:Color(0xFFB6A5C9),fontSize:10))]));
+  Widget _feature(IconData icon,String title,String subtitle,VoidCallback action)=>InkWell(onTap:action,borderRadius:BorderRadius.circular(18),child:Container(padding:const EdgeInsets.all(15),decoration:BoxDecoration(color:const Color(0xFF16092A),borderRadius:BorderRadius.circular(18),border:Border.all(color:kavelyntPurple.withOpacity(.55)),boxShadow:[BoxShadow(color:kavelyntPurple.withOpacity(.10),blurRadius:16)]),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Icon(icon,color:kavelyntGold,size:25),const SizedBox(height:12),Text(title,style:const TextStyle(color:Colors.white,fontWeight:FontWeight.w900,fontSize:14)),const SizedBox(height:4),Text(subtitle,style:const TextStyle(color:Color(0xFFB6A5C9),fontSize:11))])));
+  Widget _orb(double size,Color color)=>IgnorePointer(child:Container(width:size,height:size,decoration:BoxDecoration(shape:BoxShape.circle,gradient:RadialGradient(colors:[color.withOpacity(.18),color.withOpacity(.04),Colors.transparent]))));
 }
 
 int _previousThreshold(int points) {
