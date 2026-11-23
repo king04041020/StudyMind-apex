@@ -50,6 +50,21 @@ jobs:
       - name: Installer les dependances
         run: flutter pub get
 
+      - name: Normaliser l'icône Android pour AAPT2
+        run: |
+          python -m pip install --user pillow
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          icon = Path("android/app/src/main/res/drawable-nodpi/kavelynt_icon.png")
+          with Image.open(icon) as source:
+              normalized = source.convert("RGBA")
+              normalized.save(icon, format="PNG", optimize=False)
+          with Image.open(icon) as check:
+              check.verify()
+          print(f"Icone PNG normalisee et valide: {icon}")
+          PY
+
       - name: Construire APK
         run: flutter build apk --release --no-tree-shake-icons
 
