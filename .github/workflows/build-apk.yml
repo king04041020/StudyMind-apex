@@ -50,19 +50,37 @@ jobs:
       - name: Installer les dependances
         run: flutter pub get
 
-      - name: Normaliser l'icône Android pour AAPT2
+      - name: Regenerer une icone Android PNG saine
         run: |
           python -m pip install --user pillow
           python - <<'PY'
           from pathlib import Path
-          from PIL import Image
-          icon = Path("android/app/src/main/res/drawable-nodpi/kavelynt_icon.png")
-          with Image.open(icon) as source:
-              normalized = source.convert("RGBA")
-              normalized.save(icon, format="PNG", optimize=False)
-          with Image.open(icon) as check:
+          from PIL import Image, ImageDraw, ImageFilter
+          import math
+          path = Path("android/app/src/main/res/drawable-nodpi/kavelynt_icon.png")
+          size = 512
+          image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+          px = image.load()
+          for y in range(size):
+              for x in range(size):
+                  dx, dy = x-size/2, y-size/2
+                  if dx*dx+dy*dy <= 246*246:
+                      t = (x+y)/(2*size)
+                      px[x,y] = (int(65+110*t), int(0+18*t), int(170+80*t), 255)
+          draw = ImageDraw.Draw(image)
+          draw.rounded_rectangle((42,42,470,470), radius=105, outline=(255,205,75,255), width=9)
+          # Stylized luminous K / neural spark mark, drawn entirely from vector-like shapes.
+          draw.line([(155,145),(155,365)], fill=(255,255,255,255), width=34)
+          draw.line([(165,260),(330,145)], fill=(255,255,255,255), width=34)
+          draw.line([(165,260),(340,370)], fill=(255,255,255,255), width=34)
+          draw.ellipse((300,90,355,145), fill=(255,205,75,255))
+          draw.ellipse((350,185,395,230), fill=(255,255,255,255))
+          draw.ellipse((315,350,365,400), fill=(255,205,75,255))
+          path.parent.mkdir(parents=True, exist_ok=True)
+          image.save(path, format="PNG", optimize=False)
+          with Image.open(path) as check:
               check.verify()
-          print(f"Icone PNG normalisee et valide: {icon}")
+          print(f"PNG neuf généré et vérifié: {path} ({size}x{size})")
           PY
 
       - name: Construire APK
