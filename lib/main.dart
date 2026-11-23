@@ -559,7 +559,10 @@ class _StudyMindAppState extends State<StudyMindApp> {
   Future<void> _deleteCourses(List<Course> selected) async {
     if (selected.isEmpty) return;
     final names = selected.map((c) => c.name).toSet();
-    setState(() => _courses.removeWhere((c) => names.contains(c.name)));
+    setState(() {
+      _courses.removeWhere((c) => names.contains(c.name));
+      _completedSecretCourseNames.removeAll(names);
+    });
     await _saveData();
     if (mounted) _messengerKey.currentState?.showSnackBar(SnackBar(content: Text('${names.length} matière(s) supprimée(s).')));
   }
@@ -1100,10 +1103,12 @@ class _StudyArtifactArchivePageState extends State<StudyArtifactArchivePage> {
   List<Map<String,dynamic>> _buildCombined(List<Map<String,dynamic>> cloud) {
     final combined = <Map<String,dynamic>>[...cloud];
     for (final local in _localArtifacts) {
-      final duplicate = combined.any((c) => c['type']==local['type'] && c['course']==local['course'] && c['content']==local['content']);
-      if (!duplicate) {
-        final id = local['id']?.toString();
-        final localKey = id ?? 'local:${local['type']}:${local['course']}:${local['createdAt']}:${local['content']}';
+      final id = local['id']?.toString();
+      final localKey = id ?? 'local:${local['type']}:${local['course']}:${local['createdAt']}:${local['content']}';
+      final duplicateIndex = combined.indexWhere((c) => c['type']==local['type'] && c['course']==local['course'] && c['content']==local['content']);
+      if (duplicateIndex >= 0) {
+        combined[duplicateIndex]['_localKey'] = localKey;
+      } else {
         combined.add({...local, '_localKey':localKey, '_key':'local:$localKey'});
       }
     }
