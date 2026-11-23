@@ -33,7 +33,9 @@ class _StudyMindAppState extends State<StudyMindApp> {
   final GlobalKey<ScaffoldMessengerState> _messengerKey = GlobalKey<ScaffoldMessengerState>();
   int _points = 0;
   int _tab = 0;
-  bool _secretQuestDone = false;
+  Set<String> _completedSecretCourseNames = {};
+  int _questGenerationsThisWeek = 0;
+  String _questGenerationWeek = '';
   bool _dailyQuestDone = false;
   String _dailyQuestDate = '';
   bool _loading = true;
@@ -81,7 +83,9 @@ class _StudyMindAppState extends State<StudyMindApp> {
     setState(() {
       _points = prefs.getInt('points') ?? 0;
       _tab = (prefs.getInt('tab') ?? 0).clamp(0, 3).toInt();
-      _secretQuestDone = prefs.getBool('secretQuestDone') ?? false;
+      _completedSecretCourseNames = (prefs.getStringList('completedSecretCourseNames') ?? <String>[]).toSet();
+      _questGenerationWeek = prefs.getString('questGenerationWeek') ?? _weekKey(DateTime.now());
+      _questGenerationsThisWeek = _questGenerationWeek == _weekKey(DateTime.now()) ? (prefs.getInt('questGenerationsThisWeek') ?? 0) : 0;
       _dailyQuestDone = savedDailyDate == todayKey ? (prefs.getBool('dailyQuestDone') ?? false) : false;
       _dailyQuestDate = todayKey;
       _completedExercises =
@@ -130,7 +134,10 @@ class _StudyMindAppState extends State<StudyMindApp> {
             _completedExercises = cloudData['completedExercises'] is List ? (cloudData['completedExercises'] as List).map((e)=>e.toString()).toSet() : _completedExercises;
             _dailyQuestDone = cloudData['dailyQuestDone'] as bool? ?? _dailyQuestDone;
             _dailyQuestDate = cloudData['dailyQuestDate']?.toString() ?? _dailyQuestDate;
-            _secretQuestDone = cloudData['secretQuestDone'] as bool? ?? _secretQuestDone;
+            _completedSecretCourseNames = cloudData['completedSecretCourseNames'] is List ? (cloudData['completedSecretCourseNames'] as List).map((e)=>e.toString()).toSet() : _completedSecretCourseNames;
+            final cloudWeek = cloudData['questGenerationWeek']?.toString() ?? _questGenerationWeek;
+            _questGenerationWeek = cloudWeek;
+            _questGenerationsThisWeek = cloudWeek == _weekKey(DateTime.now()) ? ((cloudData['questGenerationsThisWeek'] as num?)?.toInt() ?? _questGenerationsThisWeek) : 0;
             final cloudIdentity = cloudData['assistantIdentity']?.toString() ?? _assistantIdentity;
             final legacyBestFriend = cloudIdentity == 'MEILLEUR AMI';
             _assistantIdentity = legacyBestFriend ? 'KING' : cloudIdentity;
@@ -155,8 +162,9 @@ class _StudyMindAppState extends State<StudyMindApp> {
   Map<String, dynamic> _cloudState() => {
     'courses': _courses.map((course) => course.toJson()).toList(), 'points': _points,
     'completedExercises': _completedExercises.toList(), 'dailyQuestDone': _dailyQuestDone,
-    'dailyQuestDate': _dailyQuestDate, 'secretQuestDone': _secretQuestDone,
+    'dailyQuestDate': _dailyQuestDate, 'completedSecretCourseNames': _completedSecretCourseNames.toList(),
     'aiQuests': _aiQuests, 'completedQuestIds': _completedQuestIds.toList(), 'questCycle': _questCycle,
+    'questGenerationsThisWeek': _questGenerationsThisWeek, 'questGenerationWeek': _questGenerationWeek,
     'assistantIdentity': _assistantIdentity, 'assistantName': _assistantName,
     'assistantStyle': _assistantStyle, 'customAssistantName': _customAssistantName,
     'updatedAt': FieldValue.serverTimestamp(),
@@ -213,7 +221,9 @@ class _StudyMindAppState extends State<StudyMindApp> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('points', _points);
     await prefs.setInt('tab', _tab);
-    await prefs.setBool('secretQuestDone', _secretQuestDone);
+    await prefs.setStringList('completedSecretCourseNames', _completedSecretCourseNames.toList());
+    await prefs.setInt('questGenerationsThisWeek', _questGenerationsThisWeek);
+    await prefs.setString('questGenerationWeek', _questGenerationWeek);
     await prefs.setBool('dailyQuestDone', _dailyQuestDone);
     await prefs.setString('dailyQuestDate', _dailyQuestDate);
     await prefs.setStringList('completedExercises', _completedExercises.toList());
@@ -320,13 +330,15 @@ class _StudyMindAppState extends State<StudyMindApp> {
                       onExercise: _openExercise,
                       onImport: _importCourse,
                       onSummary: _showSummary,
+                      onSecretQuest: _openCourseSecretQuest,
+                      onDeleteCourses: _deleteCourses,
                       onArchive: () => _navigatorKey.currentState!.push(MaterialPageRoute(builder: (_) => const StudyArtifactArchivePage())),
                     ),
                     _QuestsPage(
-                      onAward: _award, dailyDone: _dailyQuestDone, secretDone: _secretQuestDone,
-                      onSecretComplete: _completeSecretQuest, quests: _aiQuests,
+                      dailyDone: _dailyQuestDone, quests: _aiQuests,
                       completedQuestIds: _completedQuestIds, loading: _questsLoading,
-                      onRefresh: _generateAiQuests, onCompleteQuest: _completeAiQuest,
+                      generationsUsed: _questGenerationsThisWeek,
+                      onRefresh: _generateAiQuests, onVerifyQuest: _verifyAiQuest,
                     ),
                     _ProfilePage(
                       points: _points,
