@@ -290,14 +290,40 @@ class _KavelyntAppState extends State<KavelyntApp> {
 
   void _award(int points, String label) {
     if (points <= 0) return;
+    final previousRank = _rank;
     setState(() => _points += points);
+    final promotedRank = _rank;
     _saveData();
-    _messengerKey.currentState!.showSnackBar(
-      SnackBar(
-        content: Text('$label : +$points PR'),
-        backgroundColor: const Color(0xFF126B91),
-      ),
-    );
+    if (promotedRank != previousRank) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final context = _navigatorKey.currentContext;
+        if (context == null) return;
+        showGeneralDialog<void>(
+          context: context,
+          barrierDismissible: true,
+          barrierLabel: 'Promotion de rang',
+          barrierColor: Colors.black.withValues(alpha: 0.82),
+          transitionDuration: const Duration(milliseconds: 420),
+          pageBuilder: (dialogContext, animation, secondaryAnimation) =>
+              _RankPromotionDialog(previousRank: previousRank, rank: promotedRank),
+          transitionBuilder: (context, animation, secondaryAnimation, child) {
+            final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutBack);
+            return FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(scale: curved, child: child),
+            );
+          },
+        );
+      });
+    } else {
+      _messengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('$label : +$points PR'),
+          backgroundColor: const Color(0xFF126B91),
+        ),
+      );
+    }
   }
 
   @override
@@ -840,6 +866,120 @@ class Course {
         json['iconCodePoint'] as int? ?? Icons.auto_stories.codePoint,
         fontFamily: json['fontFamily'] as String? ?? 'MaterialIcons',
         fontPackage: json['fontPackage'] as String?,
+      ),
+    );
+  }
+}
+
+class _RankPromotionDialog extends StatefulWidget {
+  const _RankPromotionDialog({required this.previousRank, required this.rank});
+
+  final String previousRank;
+  final String rank;
+
+  @override
+  State<_RankPromotionDialog> createState() => _RankPromotionDialogState();
+}
+
+class _RankPromotionDialogState extends State<_RankPromotionDialog>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1500),
+  )..forward();
+
+  Color get _accent {
+    switch (widget.rank) {
+      case 'SSS': return const Color(0xFFFFD76A);
+      case 'SS': return const Color(0xFFCF9BFF);
+      case 'S': return const Color(0xFFFFB65C);
+      case 'A': return const Color(0xFF69D8FF);
+      case 'B': return const Color(0xFF70E0B0);
+      case 'C': return const Color(0xFF8DB7FF);
+      case 'D': return const Color(0xFFB5C7D8);
+      default: return const Color(0xFF72CFFF);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final pulse = 0.88 + (_controller.value * 0.12);
+          return Transform.scale(
+            scale: pulse,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(24, 30, 24, 24),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(28),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF142C48), Color(0xFF071321), Color(0xFF102B45)],
+                ),
+                border: Border.all(color: _accent.withValues(alpha: 0.8), width: 1.8),
+                boxShadow: [
+                  BoxShadow(color: _accent.withValues(alpha: 0.32 * _controller.value), blurRadius: 38, spreadRadius: 5),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Opacity(
+                    opacity: Curves.easeOut.transform(_controller.value.clamp(0.0, 1.0)),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        Icon(Icons.auto_awesome, color: _accent, size: 25),
+                        Icon(Icons.stars_rounded, color: _accent, size: 38),
+                        Icon(Icons.auto_awesome, color: _accent, size: 25),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text('PROMOTION !', style: TextStyle(color: _accent, fontSize: 17, fontWeight: FontWeight.w900, letterSpacing: 3)),
+                  const SizedBox(height: 8),
+                  const Text('NOUVEAU RANG DÉBLOQUÉ', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 12, letterSpacing: 1.4, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 18),
+                  Text(
+                    widget.rank,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 76,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 4,
+                      shadows: [Shadow(color: _accent.withValues(alpha: 0.9), blurRadius: 28)],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text('Rang ${widget.previousRank}  →  ${widget.rank}', style: const TextStyle(color: Colors.white70, fontSize: 15, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 22),
+                  Text('Ton travail porte ses fruits.', textAlign: TextAlign.center, style: TextStyle(color: _accent, fontSize: 15, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: _accent, foregroundColor: const Color(0xFF071321), padding: const EdgeInsets.symmetric(vertical: 14)),
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('CONTINUER', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
