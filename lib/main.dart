@@ -2280,7 +2280,14 @@ class _AssistantChatPageState extends State<AssistantChatPage> {
         throw Exception('Réponse du serveur illisible (HTTP ${response.statusCode}).');
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(data['error']?.toString() ?? 'Service IA indisponible (HTTP ${response.statusCode}).');
+        final code = data['code']?.toString() ?? '';
+        if (code == 'AI_QUOTA_EXCEEDED') {
+          throw Exception('KING a atteint temporairement la limite de requêtes IA. Tes messages sont conservés. Réessaie plus tard.');
+        }
+        if (code == 'AI_PROVIDER_UNAVAILABLE') {
+          throw Exception('Le service IA est momentanément indisponible. Réessaie dans quelques instants.');
+        }
+        throw Exception('Impossible de contacter l’assistant pour le moment. Vérifie ta connexion puis réessaie.');
       }
       final answer = data['answer']?.toString() ?? '';
       if (answer.isEmpty) throw Exception('Gemini a renvoyé une réponse vide.');
