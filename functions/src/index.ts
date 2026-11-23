@@ -33,7 +33,7 @@ export const generateStudyContent = onCall(
       throw new HttpsError('invalid-argument', 'Type de génération non reconnu.');
     }
 
-    const prompt = `Tu es StudyMind, assistant pédagogique. Réponds en français, clairement et sans inventer.\nTâche: ${task}\nÀ partir du cours ci-dessous, produis uniquement un contenu fidèle au cours, structuré avec titres et listes. Pour quiz, donne 5 questions puis un corrigé séparé.\nCOURS:\n${text}`;
+    const prompt = `Tu es Kavelynt, assistant pédagogique. Réponds en français, clairement et sans inventer.\nTâche: ${task}\nÀ partir du cours ci-dessous, produis uniquement un contenu fidèle au cours, structuré avec titres et listes. Pour quiz, donne 5 questions puis un corrigé séparé.\nCOURS:\n${text}`;
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey.value()}`,
       {
