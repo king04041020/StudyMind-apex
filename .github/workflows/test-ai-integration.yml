@@ -2,6 +2,12 @@ name: Test StudyMind AI end-to-end
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "worker.js"
+      - ".github/workflows/test-ai-integration.yml"
   workflow_run:
     workflows:
       - Deploy StudyMind AI Worker
