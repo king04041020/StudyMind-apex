@@ -1,0 +1,60 @@
+name: Build iOS Kavelynt
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    paths:
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "lib/**"
+      - "ios/**"
+      - ".github/workflows/build-ios.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    name: Compiler Kavelynt pour iOS (sans signature)
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.38.10"
+          channel: stable
+          cache: true
+
+      - name: Vérifier la structure iOS
+        run: |
+          test -f pubspec.yaml
+          test -f lib/main.dart
+          test -f ios/Podfile
+          test -f ios/Runner/Info.plist
+          test -f ios/Runner.xcodeproj/project.pbxproj
+
+      - name: Installer les dépendances Flutter
+        run: flutter pub get
+
+      - name: Installer les dépendances CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: Compiler l'application iOS
+        run: flutter build ios --release --no-codesign
+
+      - name: Vérifier l'application compilée
+        run: |
+          test -d build/ios/iphoneos/Runner.app
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" build/ios/iphoneos/Runner.app/Info.plist
+          echo "KAVELynt_IOS_COMPILE_OK"
