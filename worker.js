@@ -20,9 +20,10 @@ export default {
     // avant le timeout HTTP du client.
     const callGemini = async (payload, apiKey) => {
       const plan = [
-        // Modèle stable recommandé par Google, avec un fallback Flash-Lite actuel.
-        { model: "gemini-3.8-flash", attempts: 1 },
-        { model: "gemini-3.5-flash-lite", attempts: 2 }
+        // Le modèle léger réduit la latence; deux modèles distincts servent de secours.
+        { model: "gemini-3.5-flash-lite", attempts: 1 },
+        { model: "gemini-3.7-flash", attempts: 1 },
+        { model: "gemini-3.8-flash", attempts: 1 }
       ];
       let last = {
         ok: false, status: 503,
@@ -38,7 +39,7 @@ export default {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
                 body: JSON.stringify(payload),
-                signal: AbortSignal.timeout(24000)
+                signal: AbortSignal.timeout(14000)
               }
             );
             const data = await parseUpstream(response);
@@ -108,11 +109,23 @@ export default {
         const difficulty = String(body.difficulty || "Moyen").slice(0, 30);
         const source = String(body.text || "").trim().slice(0, 24000);
         const answer = String(body.answer || "").trim().slice(0, 6000);
-        const allowed = ["revision", "exercise", "correction", "summary", "quests", "secret_quest", "quest_validation"];
+        const imageBase64 = String(body.imageBase64 || "");
+        const mimeType = String(body.mimeType || "image/jpeg");
+        const allowed = ["revision", "exercise", "worksheet", "extract_course", "correction", "summary", "quests", "secret_quest", "quest_validation"];
         if (!allowed.includes(task)) return respond({ error: "Type de génération inconnu." }, 400);
-        if (source.length < 20) return respond({ error: "Ajoute d'abord le contenu du cours (au moins 20 caractères)." }, 400);
+        if (task === "extract_course") {
+          if (!imageBase64 || imageBase64.length > 11_000_000 || !["image/jpeg", "image/png", "image/webp", "image/heic"].includes(mimeType)) {
+            return respond({ error: "Photo invalide ou trop volumineuse (8 Mo maximum)." }, 400);
+          }
+        } else if (source.length < 20) {
+          return respond({ error: "Ajoute d'abord le contenu du cours (au moins 20 caractères)." }, 400);
+        }
         let prompt;
-        if (task === "quests") {
+        if (task === "extract_course") {
+          prompt = "Lis fidèlement cette photo de cours. Transcris le texte lisible en conservant titres, définitions, exemples, formules et listes. N'invente pas les parties floues. Commence par TITRE: suivi d'un titre court, puis le cours transcrit. Indique [passage illisible] si nécessaire. Réponds en français.";
+        } else if (task === "worksheet") {
+          prompt = "Crée une feuille imprimable de 10 exercices progressifs strictement fondés sur le cours. Numérote les exercices, varie les questions, laisse de la place pour les réponses et n'ajoute aucune notion non étudiée. Termine par une section CORRIGÉ séparée avec réponses et brèves explications. Pas de texte de conversation.";
+        } else if (task === "quests") {
           prompt = 'Génère 6 quêtes pédagogiques personnalisées, 3 principales et 3 secondaires, réparties entre les matières du contenu. Réponds uniquement en JSON valide : {"quests":[{"id":"id-stable","title":"...","description":"...","course":"...","type":"Principale ou Secondaire","reward":5}]}. Les quêtes doivent être concrètes, variées et réalisables par un élève. Récompenses entières de 3 à 10 PR.';
         } else if (task === "secret_quest") {
           prompt = "Crée une quête secrète originale, stimulante et faisable, strictement liée à la leçon fournie. Réponds uniquement en JSON valide avec les clés title, description, question, reward. La question doit demander une démonstration ou une explication précise fondée sur le cours. reward doit être 2. Ne donne jamais la solution.";
@@ -130,8 +143,11 @@ export default {
         const userPrompt = task === "correction" || task === "quest_validation"
           ? `Matière: ${course}\nCours:\n${source}\nDonnées fournies par l'élève:\n${answer}\n\nTâche: ${prompt}`
           : `Matière: ${course}\nDifficulté: ${difficulty}\nCours:\n${source}\n\nTâche: ${prompt}`;
+        const parts = task === "extract_course"
+          ? [{ text: prompt }, { inlineData: { mimeType, data: imageBase64 } }]
+          : [{ text: userPrompt }];
         const generated = await callGemini({
-          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+          contents: [{ role: "user", parts }],
           generationConfig: { temperature: 0.45, maxOutputTokens: 2200 }
         }, geminiApiKey);
         const generatedData = generated.data;
