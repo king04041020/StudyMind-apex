@@ -1,4 +1,4 @@
-name: Deploy StudyMind AI Worker
+name: Deploy Kavelynt AI Worker
 
 on:
   workflow_dispatch:
