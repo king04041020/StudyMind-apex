@@ -645,6 +645,1571 @@ class _StudyMindAppState extends State<StudyMindApp> {
       ),
     ).then((_) { nameController.dispose(); contentController.dispose(); });
   }
+  Future<void> _takeCoursePhoto() async {
+    try {
+      final photo = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 82, maxWidth: 2200);
+      if (photo == null) return;
+      final bytes = await photo.readAsBytes();
+      if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024) {
+        throw Exception('La photo doit faire moins de 8 Mo. Reprends-la avec une résolution plus faible.');
+      }
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('Connecte-toi à ton compte Firebase.');
+      final token = await user.getIdToken(true);
+      final response = await http.post(
+        Uri.parse('https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({'task': 'extract_course', 'course': 'Cours photographié', 'imageBase64': base64Encode(bytes), 'mimeType': photo.mimeType ?? 'image/jpeg'}),
+      ).timeout(const Duration(seconds: 100));
+      final decoded = jsonDecode(response.body);
+      final data = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(data['error']?.toString() ?? 'Extraction impossible (HTTP ${response.statusCode}).');
+      }
+      final extracted = data['content']?.toString().trim() ?? '';
+      if (extracted.length < 30) throw Exception('Le texte de la photo est trop court ou illisible. Reprends la photo avec une bonne lumière.');
+      final titleMatch = RegExp(r'^TITRE\s*:\s*(.+)
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'txt', 'md'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.single;
+      final bytes = file.bytes ?? (file.path != null ? await File(file.path!).readAsBytes() : null);
+      if (bytes == null) throw Exception('Fichier inaccessible.');
+      String extracted;
+      final extension = (file.extension ?? '').toLowerCase();
+      if (extension == 'pdf') {
+        final document = PdfDocument(inputBytes: bytes);
+        try {
+          extracted = PdfTextExtractor(document).extractText();
+        } finally {
+          document.dispose();
+        }
+      } else {
+        extracted = utf8.decode(bytes, allowMalformed: true);
+      }
+      if (extracted.trim().isEmpty) {
+        throw Exception('Aucun texte détecté. Pour un PDF scanné ou une photo, une fonction OCR sera nécessaire.');
+      }
+      final title = file.name.replaceAll(RegExp(r'\.(pdf|txt|md)$', caseSensitive: false), '');
+      final course = Course(
+        name: title.isEmpty ? 'Cours importé' : title,
+        detail: 'Document importé • ${extracted.length} caractères',
+        icon: Icons.description_outlined,
+        content: extracted,
+      );
+      setState(() => _courses.add(course));
+      await _saveData();
+      if (!mounted) return;
+      _messengerKey.currentState!.showSnackBar(const SnackBar(content: Text('Cours importé et enregistré sur cet appareil.')));
+      _showSummary(course);
+    } catch (error) {
+      if (!mounted) return;
+      _messengerKey.currentState!.showSnackBar(SnackBar(content: Text('Import impossible : $error')));
+    }
+  }
+
+  Future<void> _showSummary(Course course) async {
+    if (course.content.trim().length < 20) {
+      _comingSoon(_navigatorKey.currentContext!, 'Ajoute le contenu de cette matière avec Importer un cours pour créer une fiche IA.');
+      return;
+    }
+    showDialog(context: _navigatorKey.currentContext!, barrierDismissible: false, builder: (ctx) => const AlertDialog(content: Row(children: [CircularProgressIndicator(), SizedBox(width: 16), Expanded(child: Text('KING prépare ta fiche de révision…'))])));
+    try {
+      final generated = await _generateStudyContent(task: 'revision', course: course);
+      // L'affichage ne dépend pas des règles Firestore : conserver la fiche même
+      // si son archivage cloud échoue.
+      try { await _saveStudyArtifact('revision', course, generated); }
+      catch (saveError) { debugPrint('StudyMind fiche non archivée : $saveError'); }
+      if (!mounted) return;
+      _navigatorKey.currentState?.pop();
+      showDialog(context: _navigatorKey.currentContext!, builder: (ctx) => AlertDialog(title: Text('Fiche IA • ${course.name}'), content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: SelectableText(generated))), actions: [TextButton(onPressed: () { Navigator.pop(ctx); _navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const StudyArtifactArchivePage())); }, child: const Text('Mes documents')), TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fermer'))]));
+    } catch (error) {
+      if (!mounted) return;
+      _navigatorKey.currentState?.pop();
+      _messengerKey.currentState!.showSnackBar(SnackBar(content: Text('Création de fiche impossible : $error')));
+    }
+  }
+  void _openExercise(Course course) {
+    final exerciseId = course.name;
+    Navigator.push(
+      _navigatorKey.currentContext!,
+      MaterialPageRoute(
+        builder: (_) => ExercisePage(
+          course: course,
+          alreadySubmitted: _completedExercises.contains(exerciseId),
+          onAward: _award,
+          onSubmitted: () {
+            if (_completedExercises.contains(exerciseId)) return;
+            setState(() => _completedExercises.add(exerciseId));
+            _saveData();
+
+            if (!_dailyQuestDone) {
+              setState(() => _dailyQuestDone = true);
+              _saveData();
+              _award(1, 'Mission quotidienne terminée');
+            }
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class Course {
+  Course({required this.name, required this.detail, required this.icon, this.content = ''});
+
+  final String name;
+  final String detail;
+  final IconData icon;
+  final String content;
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'detail': detail,
+        'iconCodePoint': icon.codePoint,
+        'fontFamily': icon.fontFamily,
+        'fontPackage': icon.fontPackage,
+        'content': content,
+      };
+
+  factory Course.fromJson(Map<String, dynamic> json) {
+    return Course(
+      name: json['name'] as String? ?? 'Matière',
+      detail: json['detail'] as String? ?? '',
+      content: json['content'] as String? ?? '',
+      icon: IconData(
+        json['iconCodePoint'] as int? ?? Icons.auto_stories.codePoint,
+        fontFamily: json['fontFamily'] as String? ?? 'MaterialIcons',
+        fontPackage: json['fontPackage'] as String?,
+      ),
+    );
+  }
+}
+
+class _Dashboard extends StatelessWidget {
+  const _Dashboard({
+    required this.points,
+    required this.rank,
+    required this.nextRankAt,
+    required this.courses,
+    required this.onOpenCourses,
+    required this.onOpenQuests,
+  });
+
+  final int points;
+  final int nextRankAt;
+  final String rank;
+  final List<Course> courses;
+  final VoidCallback onOpenCourses;
+  final VoidCallback onOpenQuests;
+
+  @override
+  Widget build(BuildContext context) {
+    final previousRankAt = _previousThreshold(points);
+    final progress = points >= 5000
+        ? 1.0
+        : ((points - previousRankAt) / (nextRankAt - previousRankAt))
+            .clamp(0.0, 1.0);
+
+    return ListView(
+      padding: const EdgeInsets.all(18),
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.blur_on, color: systemBlue, size: 30),
+            const SizedBox(width: 8),
+            const Text(
+              'STUDYMIND',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2,
+                fontSize: 19,
+              ),
+            ),
+            const Spacer(),
+            _tag('SYSTEM ONLINE'),
+          ],
+        ),
+        const SizedBox(height: 22),
+        _panel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'STATUT DU CHASSEUR',
+                style: TextStyle(
+                  color: systemBlue,
+                  letterSpacing: 1.5,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'RANG $rank',
+                    style: const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '$points PR',
+                    style: const TextStyle(
+                      color: systemBlue,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 9,
+                  backgroundColor: Colors.white12,
+                  color: systemBlue,
+                ),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                points >= 5000
+                    ? 'Rang maximal atteint'
+                    : '${nextRankAt - points} PR avant le prochain rang',
+                style: const TextStyle(color: Colors.white60, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        _panel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'NOTIFICATION DU SYSTÈME',
+                style: TextStyle(
+                  color: systemBlue,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
+              ),
+              const SizedBox(height: 9),
+              const Text(
+                'Bienvenue, chasseur.',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Ton aventure commence maintenant. Termine des exercices, accomplis des quêtes et fais évoluer ton rang.',
+                style: TextStyle(color: Colors.white70, height: 1.4),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        _sectionTitle('ACCÈS RAPIDE'),
+        Row(
+          children: [
+            Expanded(
+              child: _actionCard(
+                Icons.menu_book,
+                'Mes cours',
+                onOpenCourses,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _actionCard(
+                Icons.lock_open,
+                'Quêtes',
+                onOpenQuests,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        _sectionTitle('MES MATIÈRES'),
+        ...courses.take(3).map(
+              (course) => Card(
+                child: ListTile(
+                  leading: Icon(course.icon, color: systemBlue),
+                  title: Text(course.name),
+                  subtitle: Text(course.detail),
+                  trailing: const Icon(Icons.chevron_right),
+                ),
+              ),
+            ),
+      ],
+    );
+  }
+}
+
+int _previousThreshold(int points) {
+  if (points >= 5000) return 5000;
+  if (points >= 3000) return 3000;
+  if (points >= 1500) return 1500;
+  if (points >= 750) return 750;
+  if (points >= 350) return 350;
+  if (points >= 150) return 150;
+  if (points >= 50) return 50;
+  return 0;
+}
+
+
+class _CoursesPage extends StatefulWidget {
+  const _CoursesPage({
+    required this.courses, required this.onAdd, required this.onExercise,
+    required this.onImport, required this.onSummary, required this.onSecretQuest,
+    required this.onDeleteCourses, required this.onArchive,
+  });
+  final List<Course> courses;
+  final VoidCallback onAdd;
+  final void Function(Course) onExercise;
+  final VoidCallback onImport;
+  final void Function(Course) onSummary;
+  final void Function(Course) onSecretQuest;
+  final void Function(List<Course>) onDeleteCourses;
+  final VoidCallback onArchive;
+  @override
+  State<_CoursesPage> createState() => _CoursesPageState();
+}
+
+class _CoursesPageState extends State<_CoursesPage> {
+  final Set<String> _selected = {};
+
+  Future<void> _confirmDelete() async {
+    final chosen = widget.courses.where((c) => _selected.contains(c.name)).toList();
+    if (chosen.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Supprimer les matières ?'),
+        content: Text('Supprimer ${chosen.length} matière(s) sélectionnée(s) ? Cette action ne peut pas être annulée.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Supprimer')),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      widget.onDeleteCourses(chosen);
+      setState(() => _selected.clear());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.all(18),
+    children: [
+      _pageHeader('BIBLIOTHÈQUE', 'Tes espaces de connaissances'),
+      const SizedBox(height: 14),
+      Row(children: [
+        Expanded(child: FilledButton.icon(onPressed: widget.onAdd, icon: const Icon(Icons.add), label: const Text('Créer une matière'))),
+        const SizedBox(width: 8),
+        IconButton(
+          tooltip: _selected.isEmpty ? 'Tout sélectionner' : 'Supprimer les matières sélectionnées',
+          onPressed: _selected.isEmpty ? () => setState(() => _selected.addAll(widget.courses.map((c) => c.name))) : _confirmDelete,
+          icon: Icon(_selected.isEmpty ? Icons.checklist : Icons.delete_outline, color: _selected.isEmpty ? systemBlue : Colors.redAccent),
+        ),
+        if (_selected.isNotEmpty) IconButton(tooltip: 'Annuler la sélection', onPressed: () => setState(() => _selected.clear()), icon: const Icon(Icons.close)),
+      ]),
+      if (_selected.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('${_selected.length} matière(s) sélectionnée(s)', style: const TextStyle(color: systemBlue))),
+      const SizedBox(height: 12),
+      OutlinedButton.icon(onPressed: widget.onImport, icon: const Icon(Icons.upload_file), label: const Text('Importer un cours (PDF, TXT, MD)')),
+      const SizedBox(height: 8),
+      OutlinedButton.icon(onPressed: widget.onArchive, icon: const Icon(Icons.inventory_2_outlined), label: const Text('Mes fiches et exercices enregistrés')),
+      const SizedBox(height: 14),
+      ...widget.courses.map((course) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(children: [
+            ListTile(
+              leading: Checkbox(value: _selected.contains(course.name), onChanged: (value) => setState(() { if (value == true) { _selected.add(course.name); } else { _selected.remove(course.name); } })),
+              title: Text(course.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text(course.detail),
+            ),
+            Row(children: [
+              Expanded(child: TextButton.icon(onPressed: () => widget.onSummary(course), icon: const Icon(Icons.summarize_outlined), label: const Text('Fiche'))),
+              Expanded(child: TextButton.icon(onPressed: () => widget.onSecretQuest(course), icon: const Icon(Icons.visibility_off_outlined), label: const Text('Quête secrète'))),
+              Expanded(child: FilledButton.tonalIcon(onPressed: () => widget.onExercise(course), icon: const Icon(Icons.play_arrow), label: const Text('Exercices'))),
+            ]),
+          ]),
+        ),
+      )),
+      const SizedBox(height: 12),
+      const Text('Astuce : crée une matière pour organiser tes révisions par cours.', style: TextStyle(color: Colors.white60)),
+    ],
+  );
+}
+
+
+class StudyArtifactArchivePage extends StatefulWidget {
+  const StudyArtifactArchivePage({super.key});
+  @override
+  State<StudyArtifactArchivePage> createState() => _StudyArtifactArchivePageState();
+}
+
+class _StudyArtifactArchivePageState extends State<StudyArtifactArchivePage> {
+  List<Map<String, dynamic>> _localArtifacts = [];
+  List<Map<String, dynamic>> _visibleDocs = [];
+  final Set<String> _selected = {};
+  bool _selectionMode = false;
+
+  @override
+  void initState() { super.initState(); _loadLocalArtifacts(); }
+
+  Future<void> _loadLocalArtifacts() async {
+    final prefs = await SharedPreferences.getInstance();
+    try {
+      final raw = prefs.getString('studyArtifacts');
+      final decoded = raw == null ? <dynamic>[] : jsonDecode(raw) as List<dynamic>;
+      if (mounted) setState(() => _localArtifacts = decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList());
+    } catch (error) { debugPrint('StudyMind local archive load failed: $error'); }
+  }
+
+  Future<void> _deleteOne(Map<String, dynamic> document) async {
+    final key = document['_key']?.toString();
+    if (key == null || key.isEmpty) return;
+    setState(() {
+      _selectionMode = true;
+      _selected
+        ..clear()
+        ..add(key);
+    });
+    await _deleteSelected();
+  }
+
+  Future<void> _deleteSelected() async {
+    final chosen = _visibleDocs.where((d) => _selected.contains(d['_key']?.toString())).toList();
+    if (chosen.isEmpty) return;
+    final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Supprimer les documents ?'),
+      content: Text('Supprimer ${chosen.length} document(s) sélectionné(s) ?'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Supprimer')),
+      ],
+    ));
+    if (confirmed != true) return;
+    final user = FirebaseAuth.instance.currentUser;
+    final cloudIds = chosen.where((d) => d['_cloudId'] != null).map((d) => d['_cloudId'].toString()).toSet();
+    final localKeys = chosen.where((d) => d['_localKey'] != null).map((d) => d['_localKey'].toString()).toSet();
+    if (user != null) {
+      final collection = FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts');
+      for (final id in cloudIds) { try { await collection.doc(id).delete(); } catch (e) { debugPrint('Artifact cloud delete failed: $e'); } }
+    }
+    final updated = _localArtifacts.where((item) {
+      final id = item['id']?.toString();
+      final fallback = 'local:${item['type']}:${item['course']}:${item['createdAt']}:${item['content']}';
+      return !(id != null && localKeys.contains(id)) && !localKeys.contains(fallback);
+    }).toList();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('studyArtifacts', jsonEncode(updated));
+    if (mounted) setState(() { _localArtifacts = updated; _selected.clear(); _selectionMode = false; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    final stream = user == null ? null : FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts').orderBy('createdAt', descending: true).snapshots();
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('MES DOCUMENTS ENREGISTRÉS'),
+        actions: [
+          IconButton(tooltip: _selectionMode ? 'Annuler la sélection' : 'Sélectionner plusieurs documents', onPressed: () => setState(() { _selectionMode = !_selectionMode; _selected.clear(); }), icon: Icon(_selectionMode ? Icons.close : Icons.checklist)),
+          if (_selectionMode) IconButton(tooltip: 'Supprimer la sélection', onPressed: _selected.isEmpty ? null : _deleteSelected, icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
+        ],
+      ),
+      body: user == null ? _buildLocalArtifactList() : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: stream,
+        builder: (context, snapshot) {
+          final cloud = snapshot.hasData ? snapshot.data!.docs.map((doc) => <String,dynamic>{...doc.data(), '_cloudId':doc.id}).toList() : <Map<String,dynamic>>[];
+          final combined = _buildCombined(cloud);
+          _visibleDocs = combined;
+          if (snapshot.hasError && combined.isEmpty) return const Center(child: Text('Impossible de charger les documents. Réessaie plus tard.'));
+          if (!snapshot.hasData && _localArtifacts.isEmpty) return const Center(child: CircularProgressIndicator());
+          return _buildArtifactList(combined);
+        },
+      ),
+    );
+  }
+
+  Widget _buildLocalArtifactList() {
+    final combined = _buildCombined(const []);
+    _visibleDocs = combined;
+    return _buildArtifactList(combined);
+  }
+
+  List<Map<String,dynamic>> _buildCombined(List<Map<String,dynamic>> cloud) {
+    final combined = <Map<String,dynamic>>[...cloud];
+    for (final local in _localArtifacts) {
+      final id = local['id']?.toString();
+      final localKey = id ?? 'local:${local['type']}:${local['course']}:${local['createdAt']}:${local['content']}';
+      final duplicateIndex = combined.indexWhere((c) => c['type']==local['type'] && c['course']==local['course'] && c['content']==local['content']);
+      if (duplicateIndex >= 0) {
+        combined[duplicateIndex]['_localKey'] = localKey;
+      } else {
+        combined.add({...local, '_localKey':localKey, '_key':'local:$localKey'});
+      }
+    }
+    for (var i=0;i<combined.length;i++) {
+      combined[i]['_key'] ??= 'cloud:${combined[i]['_cloudId'] ?? combined[i]['id'] ?? i}';
+    }
+    return combined;
+  }
+
+  Widget _buildArtifactList(List<Map<String, dynamic>> docs) {
+    if (docs.isEmpty) return const Center(child: Text('Aucune fiche ou aucun exercice enregistré pour le moment.'));
+    return ListView.builder(
+      padding: const EdgeInsets.all(16), itemCount: docs.length,
+      itemBuilder: (context,index) {
+        final data=docs[index];
+        final revision=data['type']=='revision';
+        final title='${revision ? 'Fiche de révision' : 'Exercice'} • ${data['course'] ?? 'Cours'}';
+        final createdAt=data['createdAt'];
+        final dateLabel=createdAt is Timestamp ? createdAt.toDate().toLocal().toString().substring(0,16) : createdAt is String ? (DateTime.tryParse(createdAt)?.toLocal().toString().substring(0,16) ?? 'Enregistré') : 'Enregistré';
+        return Card(child: ListTile(
+          leading: _selectionMode ? Checkbox(value:_selected.contains(data['_key']),onChanged:(v)=>setState(()=>v==true?_selected.add(data['_key'].toString()):_selected.remove(data['_key'].toString()))) : Icon(revision?Icons.summarize_outlined:Icons.assignment_outlined,color:systemBlue),
+          title:Text(title),subtitle:Text(dateLabel),trailing:_selectionMode?null:IconButton(tooltip:'Supprimer ce document',onPressed:()=>_deleteOne(data),icon:const Icon(Icons.delete_outline,color:Colors.redAccent)),
+          onTap: _selectionMode ? ()=>setState(()=>_selected.contains(data['_key'])?_selected.remove(data['_key']):_selected.add(data['_key'].toString())) : ()=>showDialog(context:context,builder:(dialogContext)=>AlertDialog(
+            title:Text(title),content:SizedBox(width:double.maxFinite,child:SingleChildScrollView(child:SelectableText(data['content']?.toString()??'Contenu indisponible.'))),
+            actions:[TextButton(onPressed:()=>Navigator.pop(dialogContext),child:const Text('Fermer'))],
+          )),
+        ));
+      },
+    );
+  }
+}
+
+class ExercisePage extends StatefulWidget {
+  const ExercisePage({
+    super.key,
+    required this.course,
+    required this.onAward,
+    required this.alreadySubmitted,
+    required this.onSubmitted,
+  });
+
+  final Course course;
+  final void Function(int, String) onAward;
+  final bool alreadySubmitted;
+  final VoidCallback onSubmitted;
+
+  @override
+  State<ExercisePage> createState() => _ExercisePageState();
+}
+
+class _ExercisePageState extends State<ExercisePage> {
+  String _difficulty = 'Facile';
+  // Une ancienne réussite ne doit pas empêcher de générer un nouvel exercice.
+  // Les PR restent protégés contre les doublons dans le parent.
+  bool _submitted = false;
+  bool _rewardClaimed = false;
+  final TextEditingController _answer = TextEditingController();
+  String _feedback = '';
+  String? _generatedQuestion;
+  bool _aiBusy = false;
+
+  @override
+  void initState() {
+    super.initState();    _rewardClaimed = widget.alreadySubmitted;
+    if (widget.course.content.trim().length >= 20) _generateAiExercise();
+  }
+
+  Future<String> _callStudyAi(String task, {String answer = ''}) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('Connexion Firebase requise.');
+    final token = await user.getIdToken(true);
+    final response = await http.post(
+      Uri.parse('https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate'),
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      body: jsonEncode({'task': task, 'course': widget.course.name, 'text': widget.course.content, 'answer': answer, 'difficulty': _difficulty}),
+    ).timeout(const Duration(seconds: 100));
+    Map<String, dynamic> data;
+    try {
+      final decoded = jsonDecode(response.body);
+      data = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+    } catch (_) {
+      throw Exception('Réponse IA illisible (HTTP ${response.statusCode}).');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(data['error']?.toString() ?? 'Service IA indisponible (HTTP ${response.statusCode}).');
+    }
+    final content = data['content']?.toString() ?? '';
+    if (content.trim().isEmpty) throw Exception('Le service IA n’a renvoyé aucun exercice.');
+    return content;
+  }
+
+  Future<void> _saveGeneratedExercise(String content) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<dynamic> saved = [];
+    try {
+      final raw = prefs.getString('studyArtifacts');
+      if (raw != null) saved = jsonDecode(raw) as List<dynamic>;
+    } catch (_) {}
+    final artifactId = 'artifact-${DateTime.now().microsecondsSinceEpoch}';
+    saved.insert(0, {
+      'id': artifactId,
+      'type': 'exercise', 'course': widget.course.name, 'content': content,
+      'difficulty': _difficulty, 'createdAt': DateTime.now().toIso8601String(),
+    });
+    if (saved.length > 100) saved = saved.take(100).toList();
+    await prefs.setString('studyArtifacts', jsonEncode(saved));
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts').doc(artifactId).set({
+          'id': artifactId, 'type': 'exercise', 'course': widget.course.name, 'content': content, 'difficulty': _difficulty, 'createdAt': FieldValue.serverTimestamp(),
+        });
+      } catch (error) {
+        debugPrint('StudyMind exercise cloud archive failed; local copy kept: $error');
+      }
+    }
+  }
+  Future<void> _generateAiExercise() async {
+    if (_aiBusy) return;
+    if (widget.course.content.trim().length < 20) {
+      setState(() => _feedback = 'Ajoute le contenu du cours pour générer un exercice personnalisé.');
+      return;
+    }
+    setState(() {
+      _aiBusy = true;
+      _feedback = 'KING prépare un nouvel exercice…';
+      _generatedQuestion = null;
+      _answer.clear();
+      _submitted = false;
+    });
+    try {
+      final generated = await _callStudyAi('exercise');
+      // Ne pas perdre l'exercice généré si l'archivage Firestore échoue.
+      try { await _saveGeneratedExercise(generated); }
+      catch (saveError) { debugPrint('StudyMind exercice non archivé : $saveError'); }
+      final marker = RegExp(r'^\s*(?:#+\s*)?CORRECTION(?:\s+DÉTAILLÉE)?\s*:?', multiLine: true, caseSensitive: false).firstMatch(generated);
+      final question = marker == null ? generated : generated.substring(0, marker.start).trim();
+      if (mounted && question.isNotEmpty) setState(() { _generatedQuestion = question; });
+    } catch (error) {
+      if (mounted) setState(() => _feedback = 'Exercice IA indisponible : $error');
+    } finally { if (mounted) setState(() => _aiBusy = false); }
+  }
+
+  int get _reward =>
+      _difficulty == 'Facile' ? 1 : _difficulty == 'Moyen' ? 2 : 5;
+
+  String get _question {
+    final name = widget.course.name.toLowerCase();
+    if (name.contains('comptabil')) {
+      return 'Une entreprise achète des marchandises pour 100 000 FC à crédit. Quels éléments faut-il débiter et créditer dans l’écriture ?';
+    }
+    if (name.contains('math')) {
+      final lesson = widget.course.content.toLowerCase();
+      if ((lesson.contains('addition') || lesson.contains('somme')) &&
+          (lesson.contains('nombre rond') || lesson.contains('nombres ronds') || lesson.contains('centaine') || lesson.contains('dizaine'))) {
+        return 'Calcule 300 + 400, puis explique comment tu as additionné ces nombres ronds.';
+      }
+      return 'À partir de la leçon fournie, résous un calcul portant uniquement sur la notion étudiée et explique brièvement ta méthode.';
+    }
+    if (name.contains('histoire')) {
+      return 'Cite une cause majeure de la Première Guerre mondiale et explique brièvement son rôle.';
+    }
+    return 'Présente une notion importante de cette matière, donne sa définition et ajoute un exemple concret.';
+  }
+
+  bool _isCorrect(String rawAnswer) {
+    final answer = _normalize(rawAnswer);
+    final name = widget.course.name.toLowerCase();
+
+    if (name.contains('comptabil')) {
+      final hasDebit = answer.contains('debit');
+      final hasCredit = answer.contains('credit');
+      final hasSupplier = answer.contains('fournisseur');
+      final hasPurchase =
+          answer.contains('achat') || answer.contains('marchandise');
+      return hasDebit && hasCredit && hasSupplier && hasPurchase;
+    }
+
+    if (name.contains('math')) {
+      final lesson = widget.course.content.toLowerCase();
+      if ((lesson.contains('addition') || lesson.contains('somme')) &&
+          (lesson.contains('nombre rond') || lesson.contains('nombres ronds') || lesson.contains('centaine') || lesson.contains('dizaine'))) {
+        return answer.contains('700') || answer.contains('sept cents') || answer.contains('sept cent');
+      }
+      return answer.isNotEmpty;
+    }
+
+    if (name.contains('histoire')) {
+      return answer.contains('assassinat') ||
+          answer.contains('nationalisme') ||
+          answer.contains('alliance') ||
+          answer.contains('imperialisme') ||
+          answer.contains('rivalite');
+    }
+
+    return answer.length >= 80 && answer.contains('exemple');
+  }
+
+  String _normalize(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll('é', 'e')
+        .replaceAll('è', 'e')
+        .replaceAll('ê', 'e')
+        .replaceAll('ë', 'e')
+        .replaceAll('à', 'a')
+        .replaceAll('â', 'a')
+        .replaceAll('î', 'i')
+        .replaceAll('ï', 'i')
+        .replaceAll('ô', 'o')
+        .replaceAll('ù', 'u')
+        .replaceAll('û', 'u')
+        .replaceAll('ç', 'c')
+        .trim();
+  }
+
+  @override
+  void dispose() {
+    _answer.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('ENTRAÎNEMENT')),
+        body: ListView(
+          padding: const EdgeInsets.all(18),
+          children: [
+            Text(
+              widget.course.name,
+              style: const TextStyle(
+                color: systemBlue,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _panel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'CHOISIS TA DIFFICULTÉ',
+                    style: TextStyle(
+                      color: systemBlue,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    children: ['Facile', 'Moyen', 'Difficile']
+                        .map(
+                          (difficulty) => ChoiceChip(
+                            label: Text(difficulty),
+                            selected: _difficulty == difficulty,
+                            onSelected: _submitted
+                                ? null
+                                : (_) => setState(() {
+                                      _difficulty = difficulty;
+                                      _feedback = '';
+                                    }),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Récompense : +$_reward PR',
+                    style: const TextStyle(
+                      color: systemBlue,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            _panel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'EXERCICE',
+                    style: TextStyle(
+                      color: systemBlue,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _generatedQuestion ?? _question,
+                    style: const TextStyle(fontSize: 16, height: 1.4),
+                  ),
+                  const SizedBox(height: 14),
+                  if (_aiBusy) const LinearProgressIndicator(),
+                  if (widget.course.content.trim().length >= 20)
+                    Align(alignment: Alignment.centerRight, child: TextButton.icon(
+                      onPressed: _aiBusy ? null : () {
+                        setState(() {
+                          _submitted = false;
+                          _answer.clear();
+                          _feedback = '';
+                          _generatedQuestion = null;
+                        });
+                        _generateAiExercise();
+                      },
+                      icon: const Icon(Icons.auto_awesome),
+                      label: const Text('Générer un nouvel exercice'),
+                    )),
+                  TextField(
+                    controller: _answer,
+                    enabled: !_submitted,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Écris ta réponse ici…',
+                    ),
+                    onChanged: (_) => setState(() => _feedback = ''),
+                  ),
+                ],
+              ),
+            ),
+            if (_feedback.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _panel(
+                child: Text(
+                  _feedback,
+                  style: TextStyle(
+                    color: _feedback.startsWith('Bonne')
+                        ? systemBlue
+                        : Colors.orangeAccent,
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: _submitted || _aiBusy || _answer.text.trim().isEmpty
+                  ? null
+                  : _submitAnswer,
+              icon: const Icon(Icons.check_circle_outline),
+              label: Text(
+                _submitted ? 'Exercice déjà soumis' : 'Vérifier ma réponse',
+              ),
+            ),
+            if (_submitted)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: _panel(
+                  child: const Text(
+                    'Réponse validée et enregistrée. Tu ne peux recevoir les PR de cet exercice qu’une seule fois.',
+                    style: TextStyle(color: systemBlue),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 10),
+            Text(
+              widget.course.content.trim().length >= 20 ? 'Exercice et correction générés à partir de ton cours par l’IA.' : 'Importe le cours dans cette matière pour générer des exercices personnalisés par l’IA.',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+          ],
+        ),
+      );
+
+  Future<void> _submitAnswer() async {
+    if (_aiBusy || _answer.text.trim().isEmpty) return;
+    if (widget.course.content.trim().length >= 20) {
+      setState(() { _aiBusy = true; _feedback = 'KING corrige ta réponse…'; });
+      try {
+        final correction = await _callStudyAi('correction', answer: 'Consigne : ${_generatedQuestion ?? _question}\nRéponse : ${_answer.text}');
+        final correct = _hasPositiveAiVerdict(correction);
+        if (!mounted) return;
+        setState(() { _feedback = correction; _submitted = correct; });
+        if (correct) {
+          widget.onSubmitted();
+          if (!_rewardClaimed) {
+            _rewardClaimed = true;
+            widget.onAward(_reward, 'Exercice réussi');
+          }
+        }
+      } catch (error) {
+        if (mounted) setState(() => _feedback = 'Correction IA indisponible : $error. Réessaie.');
+      } finally { if (mounted) setState(() => _aiBusy = false); }
+      return;
+    }
+    if (!_isCorrect(_answer.text)) {
+      setState(() { _feedback = 'Réponse non validée. Relis la consigne et essaie encore.'; });
+      return;
+    }
+    setState(() { _submitted = true; _feedback = 'Bonne réponse ! Ton exercice est validé.'; });
+    widget.onSubmitted();
+    if (!_rewardClaimed) {
+      _rewardClaimed = true;
+      widget.onAward(_reward, 'Exercice réussi');
+    }
+  }
+}
+
+
+class _QuestsPage extends StatelessWidget {
+  const _QuestsPage({
+    required this.dailyDone, required this.quests, required this.completedQuestIds,
+    required this.loading, required this.generationsUsed, required this.onRefresh,
+    required this.onVerifyQuest,
+  });
+  final bool dailyDone, loading;
+  final List<Map<String,String>> quests;
+  final Set<String> completedQuestIds;
+  final int generationsUsed;
+  final VoidCallback onRefresh;
+  final Future<void> Function(Map<String,String>) onVerifyQuest;
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.all(18),
+    children: [
+      _pageHeader('JOURNAL DES QUÊTES', 'Missions adaptées à tes cours • renouvellement tous les 14 jours'),
+      const SizedBox(height:14),
+      _questCard('MISSION QUOTIDIENNE','Échauffement intellectuel',dailyDone?'Mission accomplie.':'Termine correctement un exercice.',dailyDone?'TERMINÉE':'+1 PR',Icons.task_alt,(){if(!dailyDone)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Réussis un exercice pour terminer cette mission.')));}),
+      const SizedBox(height:18),
+      Row(children:[
+        const Expanded(child:Text('QUÊTES PERSONNALISÉES PAR IA',style:TextStyle(color:systemBlue,fontWeight:FontWeight.bold))),
+        IconButton(onPressed:loading||generationsUsed>=3?null:onRefresh,icon:const Icon(Icons.refresh)),
+      ]),
+      Text('Générations cette semaine : $generationsUsed / 3',style:const TextStyle(color:Colors.white60,fontSize:12)),
+      if(loading)const LinearProgressIndicator(),
+      if(quests.isEmpty&&!loading)const Text('Ajoute le contenu de tes cours pour générer des quêtes personnalisées.'),
+      ...quests.map((q){
+        final id=q['id']??'';
+        final done=completedQuestIds.contains(id);
+        return Card(child:ListTile(
+          leading:Icon((q['type']??'').toLowerCase().contains('second')?Icons.bolt:Icons.flag,color:systemBlue),
+          title:Text(q['title']??'Mission'),
+          subtitle:Text('${q['type']??'Quête'} • ${q['course']??''}\n${q['description']??''}'),
+          isThreeLine:true,
+          trailing:done?const Icon(Icons.check_circle,color:Colors.green):TextButton(onPressed:()=>onVerifyQuest(q),child:const Text('Vérifier')),
+        ));
+      }),
+      const SizedBox(height:12),
+      _panel(child:const Text('Chaque quête doit être réellement accomplie puis expliquée. KING vérifie ta réponse avant d’attribuer les PR. Tu peux générer au maximum 3 séries de quêtes IA par semaine. Les récompenses ne sont attribuées qu’une seule fois.',style:TextStyle(color:Colors.white70,height:1.4))),
+    ],
+  );
+}
+
+class CourseSecretQuestPage extends StatefulWidget {
+  const CourseSecretQuestPage({super.key,required this.course,required this.alreadyCompleted,required this.onCompleted});
+  final Course course;
+  final bool alreadyCompleted;
+  final VoidCallback onCompleted;
+  @override
+  State<CourseSecretQuestPage> createState()=>_CourseSecretQuestPageState();
+}
+
+class _CourseSecretQuestPageState extends State<CourseSecretQuestPage> {
+  static const String _workerUrl='https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate';
+  final TextEditingController _answer=TextEditingController();
+  Map<String,dynamic>? _quest;
+  bool _busy=false;
+  bool _done=false;
+  String _feedback='';
+
+  @override
+  void initState(){super.initState();_done=widget.alreadyCompleted;if(!_done)_generate();}
+
+  Future<String> _callAi(String task,{String answer=''}) async {
+    final user=FirebaseAuth.instance.currentUser;
+    if(user==null)throw Exception('Connexion Firebase requise.');
+    final token=await user.getIdToken(true);
+    final response=await http.post(Uri.parse(_workerUrl),headers:{'Content-Type':'application/json','Authorization':'Bearer $token'},body:jsonEncode({'task':task,'course':widget.course.name,'text':widget.course.content,'answer':answer})).timeout(const Duration(seconds:90));
+    Map<String,dynamic> data;
+    try{final decoded=jsonDecode(response.body);data=decoded is Map<String,dynamic>?decoded:<String,dynamic>{};}catch(_){throw Exception('Réponse IA illisible.');}
+    if(response.statusCode<200||response.statusCode>=300)throw Exception(data['error']?.toString()??'Service IA indisponible.');
+    return data['content']?.toString()??'';
+  }
+
+  Future<void> _generate() async {
+    if(widget.course.content.trim().length<20){setState(()=>_feedback='Ajoute le contenu du cours pour créer une quête secrète liée à cette leçon.');return;}
+    setState(()=>_busy=true);
+    try{
+      final raw=await _callAi('secret_quest');
+      final cleaned=raw.replaceFirst(RegExp(r'^\s*\x60\x60\x60(?:json)?\s*'),'').replaceFirst(RegExp(r'\s*\x60\x60\x60\s*$'),'').trim();
+      final decoded=jsonDecode(cleaned);
+      if(decoded is! Map)throw Exception('Format de quête invalide.');
+      if(mounted)setState(()=>_quest=Map<String,dynamic>.from(decoded));
+    }catch(error){if(mounted)setState(()=>_feedback='Création impossible : $error');}
+    finally{if(mounted)setState(()=>_busy=false);}
+  }
+
+  Future<void> _verify() async {
+    if(_busy||_answer.text.trim().length<12||_quest==null)return;
+    setState(()=>_busy=true);
+    try{
+      final verdict=await _callAi('quest_validation',answer:'TITRE : ${_quest!['title']}\nOBJECTIF : ${_quest!['description']}\nQUESTION : ${_quest!['question']}\nRÉPONSE DE L’ÉLÈVE : ${_answer.text.trim()}');
+      final valid=_hasPositiveAiVerdict(verdict);
+      if(!mounted)return;
+      setState(()=>_feedback=verdict);
+      if(valid&&!_done){setState(()=>_done=true);widget.onCompleted();}
+    }catch(error){if(mounted)setState(()=>_feedback='Vérification impossible : $error');}
+    finally{if(mounted)setState(()=>_busy=false);}
+  }
+
+  @override
+  void dispose(){_answer.dispose();super.dispose();}
+
+  @override
+  Widget build(BuildContext context)=>Scaffold(
+    appBar:AppBar(title:Text('QUÊTE SECRÈTE • ${widget.course.name}')),
+    body:ListView(padding:const EdgeInsets.all(18),children:[
+      _panel(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        const Text('DÉFI PERSONNALISÉ',style:TextStyle(color:systemBlue,fontWeight:FontWeight.bold,letterSpacing:1)),
+        const SizedBox(height:10),
+        if(_busy&&_quest==null)const LinearProgressIndicator(),
+        if(_done)const Text('Cette quête secrète est déjà accomplie. Les PR ont été attribués une seule fois.',style:TextStyle(color:systemBlue)),
+        if(_quest!=null)...[
+          Text(_quest!['title']?.toString()??'Défi secret',style:const TextStyle(fontSize:18,fontWeight:FontWeight.bold)),
+          const SizedBox(height:8),
+          Text(_quest!['description']?.toString()??''),
+          const SizedBox(height:14),
+          Text(_quest!['question']?.toString()??'',style:const TextStyle(height:1.4)),
+          const SizedBox(height:12),
+          TextField(controller:_answer,enabled:!_done&&!_busy,maxLines:5,decoration:const InputDecoration(border:OutlineInputBorder(),hintText:'Rédige ta réponse…')),
+          const SizedBox(height:12),
+          FilledButton.icon(onPressed:_done||_busy?null:_verify,icon:const Icon(Icons.verified_outlined),label:const Text('Vérifier ma réponse')),
+        ],
+        if(_feedback.isNotEmpty)Padding(padding:const EdgeInsets.only(top:12),child:Text(_feedback,style:TextStyle(color:_done?systemBlue:Colors.orangeAccent))),
+      ])),
+    ]),
+  );
+}
+
+class _ProfilePage extends StatelessWidget {
+  const _ProfilePage({
+    required this.points,
+    required this.rank,
+    required this.assistantName,
+    required this.assistantStyle,
+    required this.assistantIdentity,
+    required this.onAssistantChanged,
+  });
+
+  final int points;
+  final String rank;
+  final String assistantName;
+  final String assistantStyle;
+  final String assistantIdentity;
+  final void Function(String, String, [String?]) onAssistantChanged;
+
+  @override
+  Widget build(BuildContext context) => ListView(
+        padding: const EdgeInsets.all(18),
+        children: [
+          _pageHeader('PROFIL DU CHASSEUR', 'Tes statistiques et préférences'),
+          const SizedBox(height: 14),
+          _panel(
+            child: Row(
+              children: [
+                const CircleAvatar(
+                  radius: 30,
+                  backgroundColor: Color(0xFF123B58),
+                  child: Icon(Icons.person, color: systemBlue, size: 34),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'CHASSEUR DE RANG $rank',
+                        style: const TextStyle(
+                          color: systemBlue,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text('$points points de réussite'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const Icon(
+                Icons.smart_toy_outlined,
+                color: systemBlue,
+              ),
+              title: const Text('Personnaliser mon assistant'),
+              subtitle: Text('$assistantName • $assistantStyle'),
+              onTap: () => _assistantDialog(
+                context,
+                assistantIdentity,
+                assistantStyle,
+                assistantName,
+                onAssistantChanged,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _panel(
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'RANGS DU SYSTÈME',
+                  style: TextStyle(
+                    color: systemBlue,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'E — 0 PR\n'
+                  'D — 50 PR\n'
+                  'C — 150 PR\n'
+                  'B — 350 PR\n'
+                  'A — 750 PR\n'
+                  'S — 1 500 PR\n'
+                  'SS — 3 000 PR\n'
+                  'SSS — 5 000 PR',
+                  style: TextStyle(height: 1.7),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+}
+
+void _assistantDialog(
+  BuildContext context,
+  String currentIdentity,
+  String currentStyle,
+  String currentName,
+  void Function(String, String, [String?]) onSave,
+) {
+  String identity = currentIdentity;
+  String style = currentStyle;
+  final customNameController = TextEditingController(text: currentIdentity == 'PERSONNALISÉ' ? currentName : '');
+
+  showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setLocal) => AlertDialog(
+        title: const Text('Personnaliser l’assistant'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<String>(
+              value: identity,
+              decoration: const InputDecoration(labelText: 'Choix'),
+              items: const [
+                DropdownMenuItem(value: 'KING', child: Text('KING')),
+                DropdownMenuItem(value: 'QUEEN', child: Text('QUEEN')),
+                DropdownMenuItem(value: 'PERSONNALISÉ', child: Text('Personnalisé')),
+              ],
+              onChanged: (value) {
+                if (value != null) setLocal(() => identity = value);
+              },
+            ),            if (identity == 'PERSONNALISÉ') ...[
+              const SizedBox(height: 12),
+              TextField(controller: customNameController, decoration: const InputDecoration(labelText: 'Nom de l’assistant')),
+            ],
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: style,
+              decoration: const InputDecoration(labelText: 'Personnalité'),
+              items: ['Mentor', 'Professeur', 'Rival', 'Génie', 'Meilleur ami']
+                  .map(
+                    (item) => DropdownMenuItem(
+                      value: item,
+                      child: Text(item),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) setLocal(() => style = value);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () { customNameController.dispose(); Navigator.pop(ctx); },
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () {
+              onSave(identity, style, customNameController.text);
+              customNameController.dispose();
+              Navigator.pop(ctx);
+            },
+            child: const Text('Enregistrer'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _panel({required Widget child}) => Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: panelBlue,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: systemBlue.withOpacity(.35)),
+      ),
+      child: child,
+    );
+
+Widget _tag(String text) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: systemBlue.withOpacity(.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: systemBlue.withOpacity(.5)),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: systemBlue,
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1,
+        ),
+      ),
+    );
+
+Widget _sectionTitle(String text) => Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: systemBlue,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.3,
+          fontSize: 12,
+        ),
+      ),
+    );
+
+Widget _pageHeader(String title, String subtitle) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 21,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(subtitle, style: const TextStyle(color: Colors.white60)),
+      ],
+    );
+
+Widget _actionCard(IconData icon, String label, VoidCallback onTap) =>
+    InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: _panel(
+        child: Column(
+          children: [
+            Icon(icon, color: systemBlue, size: 28),
+            const SizedBox(height: 8),
+            Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+
+Widget _questCard(
+  String type,
+  String title,
+  String description,
+  String reward,
+  IconData icon,
+  VoidCallback onTap,
+) =>
+    Card(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, color: systemBlue),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      type,
+                      style: const TextStyle(
+                        color: systemBlue,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    reward,
+                    style: const TextStyle(
+                      color: systemBlue,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                description,
+                style: const TextStyle(color: Colors.white70, height: 1.35),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: onTap,
+                  child: const Text('Consulter la quête'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+void _comingSoon(BuildContext context, String feature) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text('$feature : prévu dans une prochaine version.')),
+  );
+}
+
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key, required this.child, required this.onAuthenticated});
+  final Widget child;
+  final VoidCallback onAuthenticated;
+  @override
+  Widget build(BuildContext context) => StreamBuilder<User?>(
+    stream: FirebaseAuth.instance.authStateChanges(),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      }
+      if (snapshot.data == null) return const FirebaseLoginPage();
+      onAuthenticated();
+      return child;
+    },
+  );
+}
+
+class FirebaseLoginPage extends StatefulWidget {
+  const FirebaseLoginPage({super.key});
+  @override
+  State<FirebaseLoginPage> createState() => _FirebaseLoginPageState();
+}
+
+class _FirebaseLoginPageState extends State<FirebaseLoginPage> {
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  bool _register = false;
+  bool _busy = false;
+  String? _error;
+  Future<void> _submit() async {
+    setState(() { _busy = true; _error = null; });
+    try {
+      final email = _email.text.trim();
+      if (_register) {
+        await FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: _password.text);
+      } else {
+        await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: _password.text);
+      }
+    } on FirebaseAuthException catch (e) {
+      setState(() => _error = e.message ?? e.code);
+    } catch (_) { setState(() => _error = 'Connexion impossible. Vérifie Internet et réessaie.'); }
+    if (mounted) setState(() => _busy = false);
+  }
+  @override
+  void dispose() { _email.dispose(); _password.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: Center(child: SingleChildScrollView(padding: const EdgeInsets.all(24), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 420), child: Column(
+      mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Icon(Icons.auto_awesome, color: systemBlue, size: 54),
+        const SizedBox(height: 16), const Text('STUDYMIND', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: 3)),
+        const SizedBox(height: 8), Text(_register ? 'Créer ton compte' : 'Connexion Firebase', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+        const SizedBox(height: 24),
+        TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Adresse e-mail', border: OutlineInputBorder())),
+        const SizedBox(height: 12), TextField(controller: _password, obscureText: true, decoration: const InputDecoration(labelText: 'Mot de passe', border: OutlineInputBorder())),
+        if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: const TextStyle(color: Colors.redAccent))),
+        const SizedBox(height: 18), FilledButton(onPressed: _busy ? null : _submit, child: _busy ? const CircularProgressIndicator() : Text(_register ? 'Créer le compte' : 'Se connecter')),
+        TextButton(onPressed: _busy ? null : () => setState(() { _register = !_register; _error = null; }), child: Text(_register ? 'J’ai déjà un compte' : 'Créer un compte')),
+      ],
+    )))),
+  );
+}
+
+class AssistantChatPage extends StatefulWidget {
+  const AssistantChatPage({super.key, required this.mode, required this.style, required this.course, this.courseContext = '', this.assistantName = 'KING'});
+  final String mode;
+  final String style;
+  final String course;
+  final String courseContext;
+  final String assistantName;
+  @override
+  State<AssistantChatPage> createState() => _AssistantChatPageState();
+}
+
+class _AssistantChatPageState extends State<AssistantChatPage> {
+  static const String workerUrl = 'https://studymind-assistant-2026.kayumbagradel05.workers.dev';
+  final _controller = TextEditingController();
+  final List<Map<String, String>> _messages = [];
+  bool _sending = false;
+  bool _loadingHistory = true;
+  String? _error;
+
+  CollectionReference<Map<String, dynamic>>? get _chatMessages {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return null;
+    return FirebaseFirestore.instance.collection('users').doc(uid).collection('assistantChats').doc('main').collection('messages');
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final ref = _chatMessages;
+      if (ref == null) return;
+      final snapshot = await ref.orderBy('createdAt').get();
+      if (!mounted) return;
+      setState(() {
+        _messages..clear()..addAll(snapshot.docs.map((doc) => {
+          'role': doc.data()['role']?.toString() ?? 'assistant',
+          'text': doc.data()['text']?.toString() ?? '',
+        }));
+      });
+    } catch (error) {
+      debugPrint('StudyMind chat history load failed: $error');
+      if (mounted) setState(() => _error = 'Historique non chargé : vérifie ta connexion.');
+    } finally {
+      if (mounted) setState(() => _loadingHistory = false);
+    }
+  }
+
+  Future<void> _saveChatMessage(String role, String text) async {
+    final ref = _chatMessages;
+    if (ref == null) throw Exception('Connecte-toi pour sauvegarder cette conversation.');
+    await ref.add({'role': role, 'text': text, 'createdAt': FieldValue.serverTimestamp()});
+  }
+
+  Future<void> _send() async {
+    final question = _controller.text.trim();
+    if (question.isEmpty || _sending) return;
+    _controller.clear();
+    setState(() { _messages.add({'role':'user','text':question}); _sending = true; _error = null; });
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('Connecte-toi à ton compte Firebase.');
+      try {
+        await _saveChatMessage('user', question);
+      } catch (error) {
+        debugPrint('StudyMind user chat message not saved to cloud: $error');
+      }
+      final token = await user.getIdToken(true);
+      final response = await http.post(Uri.parse('$workerUrl/api/chat'),
+        headers: {'Content-Type':'application/json','Authorization':'Bearer $token'},
+        body: jsonEncode({'message':question,'mode':widget.mode,'style':widget.style,'course':widget.course,'assistantName':widget.assistantName,'context':widget.courseContext})).timeout(const Duration(seconds: 70));
+      Map<String, dynamic> data;
+      try {
+        final decoded = jsonDecode(response.body);
+        data = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+      } catch (_) {
+        throw Exception('Réponse du serveur illisible (HTTP ${response.statusCode}).');
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(data['error']?.toString() ?? 'Service IA indisponible (HTTP ${response.statusCode}).');
+      }
+      final answer = data['answer']?.toString() ?? '';
+      if (answer.isEmpty) throw Exception('Gemini a renvoyé une réponse vide.');
+      try {
+        await _saveChatMessage('assistant', answer);
+      } catch (error) {
+        debugPrint('StudyMind assistant chat message not saved to cloud: $error');
+      }
+      if (mounted) setState(() => _messages.add({'role':'assistant','text':answer}));
+    } catch (e) { if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ','')); }
+    if (mounted) setState(() => _sending = false);
+  }
+  @override
+  void dispose() { _controller.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      automaticallyImplyLeading: false,
+      leading: IconButton(
+        tooltip: 'Retour',
+        icon: const Icon(Icons.arrow_back),
+        onPressed: () {
+          final navigator = Navigator.of(context);
+          if (navigator.canPop()) navigator.pop();
+        },
+      ),
+      title: Text('StudyMind • ${widget.assistantName}'),
+      actions: const [],
+    ),
+    body: Column(children:[
+      Expanded(child: _messages.isEmpty ? Center(child: Text('Pose une question à ${widget.assistantName}. Le contenu de ta matière sera transmis si disponible.')) : ListView.builder(padding:const EdgeInsets.all(16), itemCount:_messages.length, itemBuilder:(context,index){ final m=_messages[index]; final mine=m['role']=='user'; return Align(alignment:mine?Alignment.centerRight:Alignment.centerLeft, child: Container(margin:const EdgeInsets.symmetric(vertical:6), padding:const EdgeInsets.all(12), constraints:const BoxConstraints(maxWidth:340), decoration:BoxDecoration(color:mine?const Color(0xFF124A68):panelBlue,borderRadius:BorderRadius.circular(14)), child:Text(m['text']??'')));})),
+      if (_error != null) Padding(padding:const EdgeInsets.symmetric(horizontal:12), child:Text(_error!,style:const TextStyle(color:Colors.redAccent))),
+      if (_sending) const LinearProgressIndicator(),
+      SafeArea(top:false, child:Padding(padding:const EdgeInsets.all(12), child:Row(children:[Expanded(child:TextField(controller:_controller,minLines:1,maxLines:4,enabled:!_sending,onSubmitted:(_)=>_send(),decoration:const InputDecoration(hintText:'Écris ta question…',border:OutlineInputBorder()))),const SizedBox(width:8),IconButton.filled(onPressed:_sending?null:_send,icon:const Icon(Icons.send))]))),
+    ]),
+  );
+}, multiLine: true, caseSensitive: false).firstMatch(extracted);
+      final title = titleMatch?.group(1)?.trim() ?? 'Cours photographié';
+      final content = extracted.replaceFirst(RegExp(r'^TITRE\s*:\s*.+\r?\n?', multiLine: true, caseSensitive: false), '').trim();
+      if (_courses.any((c) => c.name.trim().toLowerCase() == title.toLowerCase())) {
+        throw Exception('Une matière portant ce nom existe déjà.');
+      }
+      final course = Course(name: title, detail: 'Cours photographié • ${content.length} caractères', icon: Icons.camera_alt_outlined, content: content.isEmpty ? extracted : content);
+      setState(() => _courses.add(course));
+      await _saveData();
+      if (!mounted) return;
+      _messengerKey.currentState?.showSnackBar(SnackBar(content: Text('Matière « $title » créée à partir de la photo.')));
+      _showSummary(course);
+    } catch (error) {
+      if (!mounted) return;
+      _messengerKey.currentState?.showSnackBar(SnackBar(content: Text('Photo du cours impossible : $error')));
+    }
+  }
+
   Future<void> _importCourse() async {
     try {
       final result = await FilePicker.platform.pickFiles(
