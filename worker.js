@@ -237,6 +237,62 @@ export default {
         }
         let content = generatedData.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("\n").trim();
         if (!content) return respond({ error: "Gemini n'a renvoyé aucun contenu." }, 502);
+        // Gemini peut entourer le JSON de balises Markdown ou d'une phrase.
+        // Normaliser les quêtes avant de les transmettre à Flutter.
+        if (task === "quests" || task === "secret_quest") {
+          const extractJson = (value) => {
+            const cleaned = String(value).replace(/\x60{3}(?:json)?/gi, "").trim();
+            const first = cleaned.indexOf("{");
+            const last = cleaned.lastIndexOf("}");
+            if (first < 0 || last <= first) return null;
+            try { return JSON.parse(cleaned.slice(first, last + 1)); }
+            catch (_) { return null; }
+          };
+          const parsed = extractJson(content);
+          if (task === "quests") {
+            const list = Array.isArray(parsed?.quests) ? parsed.quests : [];
+            const valid = list.filter(q =>
+              q && typeof q.title === "string" && q.title.trim() &&
+              typeof q.description === "string" && q.description.trim() &&
+              ["Principale", "Secondaire"].includes(q.type)
+            ).slice(0, 12);
+            if (valid.length >= 2) {
+              content = JSON.stringify({ quests: valid.map((q, index) => ({
+                id: String(q.id || `quest-${index + 1}`).slice(0, 80),
+                title: q.title.slice(0, 120),
+                description: q.description.slice(0, 600),
+                course: String(q.course || course).slice(0, 120),
+                type: q.type,
+                reward: Math.max(1, Math.min(10, Number.isFinite(Number(q.reward)) ? Math.round(Number(q.reward)) : 3))
+              })) });
+            } else {
+              console.warn("Invalid Gemini quest JSON; using safe course-based fallback");
+              content = JSON.stringify({ quests: [
+                {id:"fallback-main-1",title:"Comprendre la leçon",description:"Explique les notions principales de ce cours avec tes propres mots.",course,reward:5,type:"Principale"},
+                {id:"fallback-main-2",title:"Retenir l’essentiel",description:"Présente les définitions et les idées importantes du cours.",course,reward:5,type:"Principale"},
+                {id:"fallback-main-3",title:"Appliquer le cours",description:"Donne un exemple concret fondé sur le contenu étudié.",course,reward:5,type:"Principale"},
+                {id:"fallback-side-1",title:"Mots-clés",description:"Retrouve et définis cinq mots-clés du cours.",course,reward:3,type:"Secondaire"},
+                {id:"fallback-side-2",title:"Mini-résumé",description:"Résume le cours en cinq phrases.",course,reward:3,type:"Secondaire"},
+                {id:"fallback-side-3",title:"Question de révision",description:"Écris puis réponds à une question importante sur la leçon.",course,reward:3,type:"Secondaire"}
+              ]});
+            }
+          } else {
+            const valid = parsed && typeof parsed.title === "string" &&
+              typeof parsed.description === "string" && typeof parsed.question === "string";
+            if (valid) content = JSON.stringify({
+              title: parsed.title.slice(0, 120),
+              description: parsed.description.slice(0, 500),
+              question: parsed.question.slice(0, 1000),
+              reward: 2
+            });
+            else content = JSON.stringify({
+              title:"Défi secret : transmettre la leçon",
+              description:"Explique une notion essentielle sans recopier le cours.",
+              question:"Choisis une notion importante du cours, définis-la et illustre-la avec un exemple tiré de la leçon.",
+              reward:2
+            });
+          }
+        }
         // Une correction doit toujours fournir un verdict explicite. En cas de
         // format manquant, on choisit prudemment A_REVOIR et aucun PR n'est attribué.
         if (task === "correction" || task === "quest_validation") {
