@@ -20,10 +20,11 @@ export default {
     // avant le timeout HTTP du client.
     const callGemini = async (payload, apiKey) => {
       const plan = [
-        // Priorité au modèle Flash stable, puis modèle léger et modèle secondaire.
-        // Les erreurs de surcharge/réseau sont retentées avant de changer de modèle.
-        { model: "gemini-3.8-flash", attempts: 2 },
+        // Le modèle léger a répondu correctement lors des tests réels.
+        // En cas de surcharge, essayer plusieurs familles Flash indépendantes.
         { model: "gemini-3.5-flash-lite", attempts: 2 },
+        { model: "gemini-3.8-flash", attempts: 2 },
+        { model: "gemini-3.5-flash", attempts: 1 },
         { model: "gemini-3.7-flash", attempts: 1 }
       ];
       let last = {
@@ -40,7 +41,7 @@ export default {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
                 body: JSON.stringify(payload),
-                signal: AbortSignal.timeout(10500)
+                signal: AbortSignal.timeout(9000)
               }
             );
             const data = await parseUpstream(response);
