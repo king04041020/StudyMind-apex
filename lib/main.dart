@@ -347,6 +347,8 @@ class _StudyMindAppState extends State<StudyMindApp> {
                       onAdd: _addCourse,
                       onExercise: _openExercise,
                       onImport: _importCourse,
+                      onTakePhoto: _takeCoursePhoto,
+                      onWorksheet: _generateExerciseWorksheet,
                       onSummary: _showSummary,
                       onSecretQuest: _openCourseSecretQuest,
                       onDeleteCourses: _deleteCourses,
@@ -1022,13 +1024,16 @@ int _previousThreshold(int points) {
 class _CoursesPage extends StatefulWidget {
   const _CoursesPage({
     required this.courses, required this.onAdd, required this.onExercise,
-    required this.onImport, required this.onSummary, required this.onSecretQuest,
+    required this.onImport, required this.onTakePhoto, required this.onWorksheet,
+    required this.onSummary, required this.onSecretQuest,
     required this.onDeleteCourses, required this.onArchive,
   });
   final List<Course> courses;
   final VoidCallback onAdd;
   final void Function(Course) onExercise;
   final VoidCallback onImport;
+  final VoidCallback onTakePhoto;
+  final void Function(Course) onWorksheet;
   final void Function(Course) onSummary;
   final void Function(Course) onSecretQuest;
   final void Function(List<Course>) onDeleteCourses;
@@ -1080,6 +1085,8 @@ class _CoursesPageState extends State<_CoursesPage> {
       const SizedBox(height: 12),
       OutlinedButton.icon(onPressed: widget.onImport, icon: const Icon(Icons.upload_file), label: const Text('Importer un cours (PDF, TXT, MD)')),
       const SizedBox(height: 8),
+      OutlinedButton.icon(onPressed: widget.onTakePhoto, icon: const Icon(Icons.photo_camera_outlined), label: const Text('Photographier un cours et créer une matière')),
+      const SizedBox(height: 8),
       OutlinedButton.icon(onPressed: widget.onArchive, icon: const Icon(Icons.inventory_2_outlined), label: const Text('Mes fiches et exercices enregistrés')),
       const SizedBox(height: 14),
       ...widget.courses.map((course) => Card(
@@ -1096,6 +1103,7 @@ class _CoursesPageState extends State<_CoursesPage> {
               Expanded(child: TextButton.icon(onPressed: () => widget.onSecretQuest(course), icon: const Icon(Icons.visibility_off_outlined), label: const Text('Quête secrète'))),
               Expanded(child: FilledButton.tonalIcon(onPressed: () => widget.onExercise(course), icon: const Icon(Icons.play_arrow), label: const Text('Exercices'))),
             ]),
+            Align(alignment: Alignment.centerRight, child: TextButton.icon(onPressed: () => widget.onWorksheet(course), icon: const Icon(Icons.picture_as_pdf_outlined), label: const Text('Créer une feuille PDF à imprimer'))),
           ]),
         ),
       )),
