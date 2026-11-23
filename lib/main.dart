@@ -2210,6 +2210,38 @@ class _AssistantChatPageState extends State<AssistantChatPage> {
     }
   }
 
+  Future<void> _generateExerciseWorksheet(Course course) async {
+    if (course.content.trim().length < 20) {
+      _messengerKey.currentState?.showSnackBar(const SnackBar(content: Text('Ajoute le contenu du cours avant de créer une feuille d’exercices.')));
+      return;
+    }
+    showDialog(context: _navigatorKey.currentContext!, barrierDismissible: false, builder: (_) => const AlertDialog(content: Row(children: [CircularProgressIndicator(), SizedBox(width: 14), Expanded(child: Text('KING prépare ta feuille d’exercices…'))])));
+    try {
+      final content = await _generateStudyContent(task: 'worksheet', course: course, difficulty: 'Progressif');
+      try { await _saveStudyArtifact('worksheet', course, content); } catch (e) { debugPrint('Worksheet archive failed: $e'); }
+      if (!mounted) return;
+      _navigatorKey.currentState?.pop();
+      final document = PdfDocument();
+      try {
+        final page = document.pages.add();
+        final printable = 'StudyMind • ${course.name}\nFEUILLE D’EXERCICES\n\n$content\n\nNom : __________________________    Date : ______________';
+        PdfTextElement(text: printable, font: PdfStandardFont(PdfFontFamily.helvetica, 11)).draw(
+          page: page,
+          bounds: Rect.fromLTWH(36, 36, page.getClientSize().width - 72, page.getClientSize().height - 72),
+          format: PdfLayoutFormat(layoutType: PdfLayoutType.paginate),
+        );
+        final bytes = Uint8List.fromList(await document.save());
+        await Printing.layoutPdf(name: 'StudyMind-exercices.pdf', onLayout: (_) async => bytes);
+      } finally {
+        document.dispose();
+      }
+    } catch (error) {
+      if (!mounted) return;
+      _navigatorKey.currentState?.pop();
+      _messengerKey.currentState?.showSnackBar(SnackBar(content: Text('Feuille d’exercices impossible : $error')));
+    }
+  }
+
   Future<void> _importCourse() async {
     try {
       final result = await FilePicker.platform.pickFiles(
