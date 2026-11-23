@@ -922,209 +922,207 @@ int _previousThreshold(int points) {
   return 0;
 }
 
-class _CoursesPage extends StatelessWidget {
-  const _CoursesPage({
-    required this.courses,
-    required this.onAdd,
-    required this.onExercise,
-    required this.onImport,
-    required this.onSummary,
-    required this.onArchive,
-  });
 
+class _CoursesPage extends StatefulWidget {
+  const _CoursesPage({
+    required this.courses, required this.onAdd, required this.onExercise,
+    required this.onImport, required this.onSummary, required this.onSecretQuest,
+    required this.onDeleteCourses, required this.onArchive,
+  });
   final List<Course> courses;
   final VoidCallback onAdd;
   final void Function(Course) onExercise;
   final VoidCallback onImport;
   final void Function(Course) onSummary;
+  final void Function(Course) onSecretQuest;
+  final void Function(List<Course>) onDeleteCourses;
   final VoidCallback onArchive;
+  @override
+  State<_CoursesPage> createState() => _CoursesPageState();
+}
+
+class _CoursesPageState extends State<_CoursesPage> {
+  final Set<String> _selected = {};
+
+  Future<void> _confirmDelete() async {
+    final chosen = widget.courses.where((c) => _selected.contains(c.name)).toList();
+    if (chosen.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Supprimer les matières ?'),
+        content: Text('Supprimer ${chosen.length} matière(s) sélectionnée(s) ? Cette action ne peut pas être annulée.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Supprimer')),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      widget.onDeleteCourses(chosen);
+      setState(() => _selected.clear());
+    }
+  }
 
   @override
   Widget build(BuildContext context) => ListView(
-        padding: const EdgeInsets.all(18),
-        children: [
-          _pageHeader('BIBLIOTHÈQUE', 'Tes espaces de connaissances'),
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            onPressed: onAdd,
-            icon: const Icon(Icons.add),
-            label: const Text('Créer une matière'),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: onImport,
-            icon: const Icon(Icons.upload_file),
-            label: const Text('Importer un cours (PDF, TXT, MD)'),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: onArchive,
-            icon: const Icon(Icons.inventory_2_outlined),
-            label: const Text('Mes fiches et exercices enregistrés'),
-          ),
-          const SizedBox(height: 14),
-          ...courses.map(
-            (course) => Card(
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: Column(
-                  children: [
-                    ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: systemBlue.withOpacity(.15),
-                        child: Icon(course.icon, color: systemBlue),
-                      ),
-                      title: Text(
-                        course.name,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text(course.detail),
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextButton.icon(
-                            onPressed: () => onSummary(course),
-                            icon: const Icon(Icons.summarize_outlined),
-                            label: const Text('Fiche'),
-                          ),
-                        ),
-                        Expanded(
-                          child: FilledButton.tonalIcon(
-                            onPressed: () => onExercise(course),
-                            icon: const Icon(Icons.play_arrow),
-                            label: const Text('Exercices'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+    padding: const EdgeInsets.all(18),
+    children: [
+      _pageHeader('BIBLIOTHÈQUE', 'Tes espaces de connaissances'),
+      const SizedBox(height: 14),
+      Row(children: [
+        Expanded(child: FilledButton.icon(onPressed: widget.onAdd, icon: const Icon(Icons.add), label: const Text('Créer une matière'))),
+        const SizedBox(width: 8),
+        IconButton(
+          tooltip: _selected.isEmpty ? 'Tout sélectionner' : 'Supprimer les matières sélectionnées',
+          onPressed: _selected.isEmpty ? () => setState(() => _selected.addAll(widget.courses.map((c) => c.name))) : _confirmDelete,
+          icon: Icon(_selected.isEmpty ? Icons.checklist : Icons.delete_outline, color: _selected.isEmpty ? systemBlue : Colors.redAccent),
+        ),
+        if (_selected.isNotEmpty) IconButton(tooltip: 'Annuler la sélection', onPressed: () => setState(() => _selected.clear()), icon: const Icon(Icons.close)),
+      ]),
+      if (_selected.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('${_selected.length} matière(s) sélectionnée(s)', style: const TextStyle(color: systemBlue))),
+      const SizedBox(height: 12),
+      OutlinedButton.icon(onPressed: widget.onImport, icon: const Icon(Icons.upload_file), label: const Text('Importer un cours (PDF, TXT, MD)')),
+      const SizedBox(height: 8),
+      OutlinedButton.icon(onPressed: widget.onArchive, icon: const Icon(Icons.inventory_2_outlined), label: const Text('Mes fiches et exercices enregistrés')),
+      const SizedBox(height: 14),
+      ...widget.courses.map((course) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(children: [
+            ListTile(
+              leading: Checkbox(value: _selected.contains(course.name), onChanged: (value) => setState(() { if (value == true) { _selected.add(course.name); } else { _selected.remove(course.name); } })),
+              title: Text(course.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text(course.detail),
             ),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Astuce : crée une matière pour organiser tes révisions par cours.',
-            style: TextStyle(color: Colors.white60),
-          ),
-        ],
-      );
+            Row(children: [
+              Expanded(child: TextButton.icon(onPressed: () => widget.onSummary(course), icon: const Icon(Icons.summarize_outlined), label: const Text('Fiche'))),
+              Expanded(child: TextButton.icon(onPressed: () => widget.onSecretQuest(course), icon: const Icon(Icons.visibility_off_outlined), label: const Text('Quête secrète'))),
+              Expanded(child: FilledButton.tonalIcon(onPressed: () => widget.onExercise(course), icon: const Icon(Icons.play_arrow), label: const Text('Exercices'))),
+            ]),
+          ]),
+        ),
+      )),
+      const SizedBox(height: 12),
+      const Text('Astuce : crée une matière pour organiser tes révisions par cours.', style: TextStyle(color: Colors.white60)),
+    ],
+  );
 }
 
 
 class StudyArtifactArchivePage extends StatefulWidget {
   const StudyArtifactArchivePage({super.key});
-
   @override
   State<StudyArtifactArchivePage> createState() => _StudyArtifactArchivePageState();
 }
 
 class _StudyArtifactArchivePageState extends State<StudyArtifactArchivePage> {
   List<Map<String, dynamic>> _localArtifacts = [];
+  List<Map<String, dynamic>> _visibleDocs = [];
+  final Set<String> _selected = {};
+  bool _selectionMode = false;
 
   @override
-  void initState() {
-    super.initState();
-    _loadLocalArtifacts();
-  }
+  void initState() { super.initState(); _loadLocalArtifacts(); }
 
   Future<void> _loadLocalArtifacts() async {
     final prefs = await SharedPreferences.getInstance();
     try {
       final raw = prefs.getString('studyArtifacts');
       final decoded = raw == null ? <dynamic>[] : jsonDecode(raw) as List<dynamic>;
-      if (mounted) {
-        setState(() {
-          _localArtifacts = decoded.whereType<Map>()
-              .map((item) => Map<String, dynamic>.from(item)).toList();
-        });
-      }
-    } catch (error) {
-      debugPrint('StudyMind local archive load failed: $error');
+      if (mounted) setState(() => _localArtifacts = decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList());
+    } catch (error) { debugPrint('StudyMind local archive load failed: $error'); }
+  }
+
+  Future<void> _deleteSelected() async {
+    final chosen = _visibleDocs.where((d) => _selected.contains(d['_key']?.toString())).toList();
+    if (chosen.isEmpty) return;
+    final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Supprimer les documents ?'),
+      content: Text('Supprimer ${chosen.length} document(s) sélectionné(s) ?'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Supprimer')),
+      ],
+    ));
+    if (confirmed != true) return;
+    final user = FirebaseAuth.instance.currentUser;
+    final cloudIds = chosen.where((d) => d['_cloudId'] != null).map((d) => d['_cloudId'].toString()).toSet();
+    final localKeys = chosen.where((d) => d['_localKey'] != null).map((d) => d['_localKey'].toString()).toSet();
+    if (user != null) {
+      final collection = FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts');
+      for (final id in cloudIds) { try { await collection.doc(id).delete(); } catch (e) { debugPrint('Artifact cloud delete failed: $e'); } }
     }
+    final updated = _localArtifacts.where((item) {
+      final id = item['id']?.toString();
+      final fallback = 'local:${item['type']}:${item['course']}:${item['createdAt']}:${item['content']}';
+      return !(id != null && localKeys.contains(id)) && !localKeys.contains(fallback);
+    }).toList();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('studyArtifacts', jsonEncode(updated));
+    if (mounted) setState(() { _localArtifacts = updated; _selected.clear(); _selectionMode = false; });
   }
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    final stream = user == null ? null : FirebaseFirestore.instance
-        .collection('users').doc(user.uid).collection('studyArtifacts')
-        .orderBy('createdAt', descending: true).snapshots();
-
+    final stream = user == null ? null : FirebaseFirestore.instance.collection('users').doc(user.uid).collection('studyArtifacts').orderBy('createdAt', descending: true).snapshots();
     return Scaffold(
-      appBar: AppBar(title: const Text('MES DOCUMENTS ENREGISTRÉS')),
-      body: user == null
-          ? _buildArtifactList(_localArtifacts)
-          : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: stream,
-              builder: (context, snapshot) {
-                final combined = <Map<String, dynamic>>[];
-                if (snapshot.hasData) {
-                  combined.addAll(snapshot.data!.docs.map((doc) => doc.data()));
-                }
-                for (final local in _localArtifacts) {
-                  final duplicate = combined.any((cloud) =>
-                      cloud['type'] == local['type'] &&
-                      cloud['course'] == local['course'] &&
-                      cloud['content'] == local['content']);
-                  if (!duplicate) combined.add(local);
-                }
-                if (snapshot.hasError && combined.isEmpty) {
-                  return const Center(child: Text('Impossible de charger les documents. Réessaie plus tard.'));
-                }
-                if (!snapshot.hasData && _localArtifacts.isEmpty) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                return _buildArtifactList(combined);
-              },
-            ),
+      appBar: AppBar(
+        title: const Text('MES DOCUMENTS ENREGISTRÉS'),
+        actions: [
+          IconButton(tooltip: _selectionMode ? 'Annuler la sélection' : 'Sélectionner plusieurs documents', onPressed: () => setState(() { _selectionMode = !_selectionMode; _selected.clear(); }), icon: Icon(_selectionMode ? Icons.close : Icons.checklist)),
+          if (_selectionMode) IconButton(tooltip: 'Supprimer la sélection', onPressed: _selected.isEmpty ? null : _deleteSelected, icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
+        ],
+      ),
+      body: user == null ? _buildArtifactList(_buildCombined(const [])) : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: stream,
+        builder: (context, snapshot) {
+          final cloud = snapshot.hasData ? snapshot.data!.docs.map((doc) => <String,dynamic>{...doc.data(), '_cloudId':doc.id}) : <Map<String,dynamic>>[];
+          final combined = _buildCombined(cloud);
+          _visibleDocs = combined;
+          if (snapshot.hasError && combined.isEmpty) return const Center(child: Text('Impossible de charger les documents. Réessaie plus tard.'));
+          if (!snapshot.hasData && _localArtifacts.isEmpty) return const Center(child: CircularProgressIndicator());
+          return _buildArtifactList(combined);
+        },
+      ),
     );
   }
 
-  Widget _buildArtifactList(List<Map<String, dynamic>> docs) {
-    if (docs.isEmpty) {
-      return const Center(child: Text('Aucune fiche ou aucun exercice enregistré pour le moment.'));
+  List<Map<String,dynamic>> _buildCombined(List<Map<String,dynamic>> cloud) {
+    final combined = <Map<String,dynamic>>[...cloud];
+    for (final local in _localArtifacts) {
+      final duplicate = combined.any((c) => c['type']==local['type'] && c['course']==local['course'] && c['content']==local['content']);
+      if (!duplicate) {
+        final id = local['id']?.toString();
+        final localKey = id ?? 'local:${local['type']}:${local['course']}:${local['createdAt']}:${local['content']}';
+        combined.add({...local, '_localKey':localKey, '_key':'local:$localKey'});
+      }
     }
+    for (var i=0;i<combined.length;i++) {
+      combined[i]['_key'] ??= 'cloud:${combined[i]['_cloudId'] ?? combined[i]['id'] ?? i}';
+    }
+    return combined;
+  }
+
+  Widget _buildArtifactList(List<Map<String, dynamic>> docs) {
+    if (docs.isEmpty) return const Center(child: Text('Aucune fiche ou aucun exercice enregistré pour le moment.'));
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: docs.length,
-      itemBuilder: (context, index) {
-        final data = docs[index];
-        final revision = data['type'] == 'revision';
-        final title = '${revision ? 'Fiche de révision' : 'Exercice'} • ${data['course'] ?? 'Cours'}';
-        final createdAt = data['createdAt'];
-        final dateLabel = createdAt is Timestamp
-            ? createdAt.toDate().toLocal().toString().substring(0, 16)
-            : createdAt is String
-                ? (DateTime.tryParse(createdAt)?.toLocal().toString().substring(0, 16) ?? 'Enregistré')
-                : 'Enregistré';
-        return Card(
-          child: ListTile(
-            leading: Icon(revision ? Icons.summarize_outlined : Icons.assignment_outlined, color: systemBlue),
-            title: Text(title),
-            subtitle: Text(dateLabel),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => showDialog(
-              context: context,
-              builder: (dialogContext) => AlertDialog(
-                title: Text(title),
-                content: SizedBox(
-                  width: double.maxFinite,
-                  child: SingleChildScrollView(
-                    child: SelectableText(data['content']?.toString() ?? 'Contenu indisponible.'),
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(dialogContext),
-                    child: const Text('Fermer'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
+      padding: const EdgeInsets.all(16), itemCount: docs.length,
+      itemBuilder: (context,index) {
+        final data=docs[index];
+        final revision=data['type']=='revision';
+        final title='${revision ? 'Fiche de révision' : 'Exercice'} • ${data['course'] ?? 'Cours'}';
+        final createdAt=data['createdAt'];
+        final dateLabel=createdAt is Timestamp ? createdAt.toDate().toLocal().toString().substring(0,16) : createdAt is String ? (DateTime.tryParse(createdAt)?.toLocal().toString().substring(0,16) ?? 'Enregistré') : 'Enregistré';
+        return Card(child: ListTile(
+          leading: _selectionMode ? Checkbox(value:_selected.contains(data['_key']),onChanged:(v)=>setState(()=>v==true?_selected.add(data['_key'].toString()):_selected.remove(data['_key'].toString()))) : Icon(revision?Icons.summarize_outlined:Icons.assignment_outlined,color:systemBlue),
+          title:Text(title),subtitle:Text(dateLabel),trailing:_selectionMode?null:const Icon(Icons.chevron_right),
+          onTap: _selectionMode ? ()=>setState(()=>_selected.contains(data['_key'])?_selected.remove(data['_key']):_selected.add(data['_key'].toString())) : ()=>showDialog(context:context,builder:(dialogContext)=>AlertDialog(
+            title:Text(title),content:SizedBox(width:double.maxFinite,child:SingleChildScrollView(child:SelectableText(data['content']?.toString()??'Contenu indisponible.'))),
+            actions:[TextButton(onPressed:()=>Navigator.pop(dialogContext),child:const Text('Fermer'))],
+          )),
+        ));
       },
     );
   }
