@@ -1,4 +1,4 @@
-name: Build APK StudyMind Apex
+name: Build APK Kavelynt Apex
 # Build and validate the APK before the release publisher uploads it.
 
 on:
@@ -115,7 +115,7 @@ jobs:
       - name: Publier le fichier APK
         uses: actions/upload-artifact@v5
         with:
-          name: StudyMind-Apex-APK
+          name: Kavelynt-Apex-APK
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 7
