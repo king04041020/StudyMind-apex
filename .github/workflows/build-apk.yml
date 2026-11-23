@@ -89,8 +89,21 @@ jobs:
           print(f"PNG neuf généré et vérifié: {path} ({size}x{size})")
           PY
 
-      - name: Construire APK
-        run: flutter build apk --release --no-tree-shake-icons
+      - name: Construire APK (reprises en cas de limitation Maven)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            echo "Tentative Gradle $attempt/5"
+            if flutter build apk --release --no-tree-shake-icons; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 5 ]; then
+              sleep $((attempt * 20))
+            fi
+          done
+          echo "La compilation a échoué après 5 tentatives."
+          exit 1
 
       - name: Verifier integrite, alignement, signature et manifeste APK
         shell: bash
