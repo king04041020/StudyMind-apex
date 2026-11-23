@@ -1,4 +1,4 @@
-StudyMind Apex — Flutter + plateformes natives
+Kavelynt Apex — Flutter + plateformes natives
 
 Arborescence fournie :
 - lib/main.dart : code Dart de l'application Flutter
