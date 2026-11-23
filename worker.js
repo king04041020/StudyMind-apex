@@ -154,39 +154,70 @@ export default {
           generationConfig: { temperature: 0.45, maxOutputTokens: 2200 }
         }, geminiApiKey);
         const generatedData = generated.data;
-        if (!generated.ok && task === "worksheet") {
-          // Secours local : une feuille pédagogique reste disponible même si Gemini
-          // est saturé. Les questions portent uniquement sur les notions du cours reçu.
+        if (!generated.ok && task !== "extract_course") {
+          // Secours local pour que les fonctions pédagogiques restent utilisables
+          // même pendant une panne temporaire de Gemini.
           const excerpt = source.replace(/\\s+/g, " ").trim();
-          const shortExcerpt = excerpt.length > 700 ? excerpt.slice(0, 700) + "…" : excerpt;
-          const fallbackWorksheet = [
-            "FEUILLE D’EXERCICES — " + course,
-            "Difficulté : " + difficulty,
-            "",
-            "Consigne : réponds en utilisant uniquement le cours ci-dessous.",
-            "",
-            "COURS DE RÉFÉRENCE",
-            shortExcerpt,
-            "",
-            "EXERCICES",
-            "1. Quel est le sujet principal de ce cours ? Définis-le avec tes propres mots.",
-            "2. Cite les notions ou mots-clés essentiels présentés dans le cours.",
-            "3. Explique la première idée importante et reformule-la simplement.",
-            "4. Présente les différentes étapes, éléments ou caractéristiques décrits dans le cours.",
-            "5. Quelle relation le cours établit-il entre ses notions principales ?",
-            "6. Donne un exemple concret qui illustre une notion explicitement présentée.",
-            "7. Distingue deux notions du cours et explique leur différence.",
-            "8. Transforme une explication du cours en un petit schéma ou une liste structurée.",
-            "9. Rédige trois affirmations sur le cours : deux exactes et une inexacte, puis identifie l’inexacte.",
-            "10. Résume la leçon en cinq phrases en conservant les informations essentielles.",
-            "",
-            "CORRIGÉ — éléments attendus",
-            "Les réponses doivent reprendre fidèlement les définitions, notions, relations et exemples du COURS DE RÉFÉRENCE. Pour les questions 6 à 10, vérifier que chaque réponse est cohérente avec le texte fourni et n’ajoute pas de notion extérieure.",
-            "",
-            "Nom : __________________________    Date : ______________"
-          ].join("\\n");
-          console.warn("StudyMind worksheet fallback used after Gemini upstream failure", generated.status, generated.model);
-          return respond({ content: fallbackWorksheet, model: "local-worksheet-fallback", fallback: true });
+          const shortExcerpt = excerpt.length > 900 ? excerpt.slice(0, 900) + "…" : excerpt;
+          let fallbackContent = "";
+          if (task === "worksheet") {
+            fallbackContent = [
+              "FEUILLE D’EXERCICES — " + course, "Difficulté : " + difficulty, "",
+              "Consigne : réponds en utilisant uniquement le cours ci-dessous.", "",
+              "COURS DE RÉFÉRENCE", shortExcerpt, "", "EXERCICES",
+              "1. Quel est le sujet principal de ce cours ? Définis-le avec tes propres mots.",
+              "2. Cite les notions ou mots-clés essentiels présentés dans le cours.",
+              "3. Explique la première idée importante et reformule-la simplement.",
+              "4. Présente les étapes, éléments ou caractéristiques décrits dans le cours.",
+              "5. Quelle relation le cours établit-il entre ses notions principales ?",
+              "6. Donne un exemple concret qui illustre une notion explicitement présentée.",
+              "7. Distingue deux notions du cours et explique leur différence.",
+              "8. Transforme une explication du cours en un schéma ou une liste structurée.",
+              "9. Rédige trois affirmations sur le cours : deux exactes et une inexacte, puis identifie l’inexacte.",
+              "10. Résume la leçon en cinq phrases.", "", "CORRIGÉ — éléments attendus",
+              "Les réponses doivent reprendre fidèlement les définitions, notions, relations et exemples du cours de référence, sans ajouter de notion extérieure."
+            ].join("\\n");
+          } else if (task === "revision" || task === "summary") {
+            fallbackContent = [
+              (task === "revision" ? "FICHE DE RÉVISION — " : "RÉSUMÉ — ") + course, "",
+              "CONTENU DU COURS", shortExcerpt, "",
+              "À RETENIR", "• Identifie le sujet central et les notions essentielles du texte.",
+              "• Apprends les définitions et les relations explicitement données.",
+              "• Révise les exemples et les étapes dans leur ordre.",
+              "", "AUTO-ÉVALUATION",
+              "1. Explique le sujet avec tes propres mots.",
+              "2. Définis les notions clés présentes dans le cours.",
+              "3. Donne un exemple tiré du cours."
+            ].join("\\n");
+          } else if (task === "exercise") {
+            fallbackContent = [
+              "EXERCICE — " + course, "Difficulté : " + difficulty, "",
+              "À partir du cours ci-dessous, réponds aux questions sans utiliser de notions extérieures.",
+              shortExcerpt, "",
+              "1. Définis le sujet principal.",
+              "2. Explique deux notions importantes du cours.",
+              "3. Donne un exemple fidèle au cours.",
+              "4. Résume la méthode ou les étapes présentées.",
+              "", "CORRECTION : les réponses doivent reprendre les définitions, explications et exemples du texte de référence."
+            ].join("\\n");
+          } else if (task === "quests") {
+            fallbackContent = JSON.stringify({ quests: [
+              {id:"fallback-main-1",title:"Comprendre la leçon",description:"Explique les notions principales de ce cours avec tes propres mots.",course,reward:5,type:"Principale"},
+              {id:"fallback-main-2",title:"Retenir l’essentiel",description:"Présente les définitions et les idées importantes du cours.",course,reward:5,type:"Principale"},
+              {id:"fallback-main-3",title:"Appliquer le cours",description:"Donne un exemple concret fondé sur le contenu étudié.",course,reward:5,type:"Principale"},
+              {id:"fallback-side-1",title:"Mots-clés",description:"Retrouve et définis cinq mots-clés du cours.",course,reward:3,type:"Secondaire"},
+              {id:"fallback-side-2",title:"Mini-résumé",description:"Résume le cours en cinq phrases.",course,reward:3,type:"Secondaire"},
+              {id:"fallback-side-3",title:"Question de révision",description:"Écris puis réponds à une question importante sur la leçon.",course,reward:3,type:"Secondaire"}
+            ]});
+          } else if (task === "secret_quest") {
+            fallbackContent = JSON.stringify({title:"Défi secret : transmettre la leçon",description:"Explique une notion essentielle sans recopier le cours.",question:"Choisis une notion importante du cours, définis-la et illustre-la avec un exemple tiré de la leçon.",reward:2});
+          } else if (task === "correction" || task === "quest_validation") {
+            fallbackContent = "La correction automatique est temporairement indisponible. Relis le cours et vérifie que ta réponse contient une définition exacte, une explication et un exemple pertinent. Ta réponse doit être revue lorsque le service IA sera rétabli.\\nRESULTAT: A_REVOIR";
+          }
+          if (fallbackContent) {
+            console.warn("StudyMind local educational fallback used", task, generated.status, generated.model);
+            return respond({ content: fallbackContent, model: "local-fallback", fallback: true });
+          }
         }
         if (!generated.ok) {
           const detail = generatedData.error?.message || generatedData.message || generatedData._raw || "Réponse Gemini invalide.";
