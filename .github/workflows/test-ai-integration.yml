@@ -99,6 +99,48 @@ jobs:
           test "${#CONTENT}" -gt 80
           echo "CORRECTION_OK: non-empty correction generated (model: $(jq -r '.model // "unknown"' <<< "$RESPONSE"))."
  
+      - name: Test printable exercise worksheet generation
+        env:
+          FIREBASE_ID_TOKEN: ${{ steps.auth.outputs.id_token }}
+        run: |
+          set -euo pipefail
+          BODY="$(jq -n '{task:"worksheet",course:"Test de sciences",difficulty:"Progressif",text:"La photosynthèse utilise la lumière, l’eau et le dioxyde de carbone pour produire des sucres et libérer de l’oxygène. La chlorophylle capte l’énergie lumineuse."}')"
+          RESPONSE="$(curl --fail-with-body --silent --show-error --max-time 100 \
+            -H 'Content-Type: application/json' -H "Authorization: Bearer $FIREBASE_ID_TOKEN" \
+            -d "$BODY" 'https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate')"
+          CONTENT="$(jq -r '.content // empty' <<< "$RESPONSE")"
+          test "${#CONTENT}" -gt 100
+          echo "WORKSHEET_OK: printable exercise list generated."
+
+      - name: Test photographed course extraction
+        env:
+          FIREBASE_ID_TOKEN: ${{ steps.auth.outputs.id_token }}
+        run: |
+          set -euo pipefail
+          # Tiny valid JPEG fixture; this checks authenticated multimodal route handling.
+          IMAGE=' /9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9k='
+          IMAGE="$(printf '%s' "$IMAGE" | tr -d ' ')"
+          BODY="$(jq -n --arg image "$IMAGE" '{task:"extract_course",course:"Cours photographié",imageBase64:$image,mimeType:"image/jpeg"}')"
+          RESPONSE="$(curl --fail-with-body --silent --show-error --max-time 100 \
+            -H 'Content-Type: application/json' -H "Authorization: Bearer $FIREBASE_ID_TOKEN" \
+            -d "$BODY" 'https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate')"
+          CONTENT="$(jq -r '.content // empty' <<< "$RESPONSE")"
+          test -n "$CONTENT"
+          echo "PHOTO_EXTRACTION_OK: image route returned extracted content."
+
+      - name: Test AI quest generation
+        env:
+          FIREBASE_ID_TOKEN: ${{ steps.auth.outputs.id_token }}
+        run: |
+          set -euo pipefail
+          BODY="$(jq -n '{task:"quests",course:"Toutes les matières",difficulty:"Moyen",text:"MATIÈRE: Sciences. La photosynthèse utilise la lumière, l’eau et le dioxyde de carbone pour produire des sucres et libérer de l’oxygène. MATIÈRE: Français. Le nom désigne une personne, un animal, une chose ou une idée."}')"
+          RESPONSE="$(curl --fail-with-body --silent --show-error --max-time 100 \
+            -H 'Content-Type: application/json' -H "Authorization: Bearer $FIREBASE_ID_TOKEN" \
+            -d "$BODY" 'https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate')"
+          CONTENT="$(jq -r '.content // empty' <<< "$RESPONSE")"
+          jq -e '.quests | length >= 2' <<< "$CONTENT" >/dev/null
+          echo "QUESTS_OK: structured quest list generated."
+
       - name: Delete temporary Firebase test account
         if: always() && steps.auth.outputs.id_token != ''
         env:
