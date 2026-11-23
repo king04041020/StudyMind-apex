@@ -154,6 +154,40 @@ export default {
           generationConfig: { temperature: 0.45, maxOutputTokens: 2200 }
         }, geminiApiKey);
         const generatedData = generated.data;
+        if (!generated.ok && task === "worksheet") {
+          // Secours local : une feuille pédagogique reste disponible même si Gemini
+          // est saturé. Les questions portent uniquement sur les notions du cours reçu.
+          const excerpt = source.replace(/\\s+/g, " ").trim();
+          const shortExcerpt = excerpt.length > 700 ? excerpt.slice(0, 700) + "…" : excerpt;
+          const fallbackWorksheet = [
+            "FEUILLE D’EXERCICES — " + course,
+            "Difficulté : " + difficulty,
+            "",
+            "Consigne : réponds en utilisant uniquement le cours ci-dessous.",
+            "",
+            "COURS DE RÉFÉRENCE",
+            shortExcerpt,
+            "",
+            "EXERCICES",
+            "1. Quel est le sujet principal de ce cours ? Définis-le avec tes propres mots.",
+            "2. Cite les notions ou mots-clés essentiels présentés dans le cours.",
+            "3. Explique la première idée importante et reformule-la simplement.",
+            "4. Présente les différentes étapes, éléments ou caractéristiques décrits dans le cours.",
+            "5. Quelle relation le cours établit-il entre ses notions principales ?",
+            "6. Donne un exemple concret qui illustre une notion explicitement présentée.",
+            "7. Distingue deux notions du cours et explique leur différence.",
+            "8. Transforme une explication du cours en un petit schéma ou une liste structurée.",
+            "9. Rédige trois affirmations sur le cours : deux exactes et une inexacte, puis identifie l’inexacte.",
+            "10. Résume la leçon en cinq phrases en conservant les informations essentielles.",
+            "",
+            "CORRIGÉ — éléments attendus",
+            "Les réponses doivent reprendre fidèlement les définitions, notions, relations et exemples du COURS DE RÉFÉRENCE. Pour les questions 6 à 10, vérifier que chaque réponse est cohérente avec le texte fourni et n’ajoute pas de notion extérieure.",
+            "",
+            "Nom : __________________________    Date : ______________"
+          ].join("\\n");
+          console.warn("StudyMind worksheet fallback used after Gemini upstream failure", generated.status, generated.model);
+          return respond({ content: fallbackWorksheet, model: "local-worksheet-fallback", fallback: true });
+        }
         if (!generated.ok) {
           const detail = generatedData.error?.message || generatedData.message || generatedData._raw || "Réponse Gemini invalide.";
           console.error("StudyMind Gemini generation error", generated.status, generated.model, detail);
