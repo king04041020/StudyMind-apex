@@ -1,4 +1,5 @@
 name: Build APK Kavelynt Apex
+# Release pipeline expects the Kavelynt-Apex-APK artifact.
 # Build and validate the APK before the release publisher uploads it.
 
 on:
