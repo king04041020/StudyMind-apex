@@ -597,8 +597,7 @@ class _StudyMindAppState extends State<StudyMindApp> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
           FilledButton(
             onPressed: () async {
-              final name = nameController.text.trim();
-              if (name.isEmpty) {
+              final name = nameController.text.trim();              if (name.isEmpty) {
                 ScaffoldMessenger.of(ctx).showSnackBar(
                   const SnackBar(content: Text('Donne un nom à cette matière.')),
                 );
@@ -1108,7 +1107,7 @@ class _StudyArtifactArchivePageState extends State<StudyArtifactArchivePage> {
       body: user == null ? _buildLocalArtifactList() : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: stream,
         builder: (context, snapshot) {
-          final cloud = snapshot.hasData ? snapshot.data!.docs.map((doc) => <String,dynamic>{...doc.data(), '_cloudId':doc.id}) : <Map<String,dynamic>>[];
+          final cloud = snapshot.hasData ? snapshot.data!.docs.map((doc) => <String,dynamic>{...doc.data(), '_cloudId':doc.id}).toList() : <Map<String,dynamic>>[];
           final combined = _buildCombined(cloud);
           _visibleDocs = combined;
           if (snapshot.hasError && combined.isEmpty) return const Center(child: Text('Impossible de charger les documents. Réessaie plus tard.'));
@@ -1197,8 +1196,7 @@ class _ExercisePageState extends State<ExercisePage> {
 
   @override
   void initState() {
-    super.initState();
-    _rewardClaimed = widget.alreadySubmitted;
+    super.initState();    _rewardClaimed = widget.alreadySubmitted;
     if (widget.course.content.trim().length >= 20) _generateAiExercise();
   }
 
@@ -1797,8 +1795,7 @@ void _assistantDialog(
               onChanged: (value) {
                 if (value != null) setLocal(() => identity = value);
               },
-            ),
-            if (identity == 'PERSONNALISÉ') ...[
+            ),            if (identity == 'PERSONNALISÉ') ...[
               const SizedBox(height: 12),
               TextField(controller: customNameController, decoration: const InputDecoration(labelText: 'Nom de l’assistant')),
             ],
