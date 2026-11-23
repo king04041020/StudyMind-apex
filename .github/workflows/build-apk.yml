@@ -15,7 +15,12 @@ on:
       - "pubspec.lock"
       - "lib/**"
       - "android/**"
+      - "worker.js"
       - ".github/workflows/build-apk.yml"
+
+concurrency:
+  group: kavelynt-android-build
+  cancel-in-progress: false
 
 permissions:
   contents: read
