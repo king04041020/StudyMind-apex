@@ -398,90 +398,170 @@ class _StudyMindAppState extends State<StudyMindApp> {
     _saveData();
   }
 
+
+  String _weekKey(DateTime date) {
+    final thursday = date.add(Duration(days: 4 - date.weekday));
+    final year = thursday.year;
+    final januaryFourth = DateTime(year, 1, 4);
+    final firstMonday = januaryFourth.subtract(Duration(days: januaryFourth.weekday - 1));
+    final week = thursday.difference(firstMonday).inDays ~/ 7 + 1;
+    return '$year-W${week.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _generateAiQuests() async {
     if (_questsLoading || _courses.isEmpty) return;
+    final currentWeek = _weekKey(DateTime.now());
+    if (_questGenerationWeek != currentWeek) {
+      _questGenerationWeek = currentWeek;
+      _questGenerationsThisWeek = 0;
+    }
+    if (_questGenerationsThisWeek >= 3) {
+      _messengerKey.currentState?.showSnackBar(const SnackBar(content: Text('Limite atteinte : 3 générations de quêtes IA par semaine.')));
+      await _saveData();
+      return;
+    }
     final source = _courses
         .where((course) => course.content.trim().length >= 20)
         .map((course) => 'MATIÈRE: ${course.name}\n${course.content}')
         .join('\n\n')
         .trim();
     if (source.length < 20) {
-      if (mounted) {
-        _messengerKey.currentState!.showSnackBar(
-          const SnackBar(content: Text('Ajoute le contenu de tes cours pour générer des quêtes.')),
-        );
-      }
+      _messengerKey.currentState?.showSnackBar(const SnackBar(content: Text('Ajoute le contenu de tes cours pour générer des quêtes.')));
       return;
     }
     setState(() => _questsLoading = true);
     try {
       final raw = await _generateStudyContent(
         task: 'quests',
-        course: Course(
-          name: 'Toutes les matières',
-          detail: 'Quêtes StudyMind',
-          icon: Icons.assignment,
-          content: source,
-        ),
+        course: Course(name: 'Toutes les matières', detail: 'Quêtes StudyMind', icon: Icons.assignment, content: source),
       );
-      final cleaned = raw
-          .replaceFirst(RegExp(r'^\s*```(?:json)?\s*'), '')
-          .replaceFirst(RegExp(r'\s*```\s*$'), '')
-          .trim();
+      final cleaned = raw.replaceFirst(RegExp(r'^\s*\x60\x60\x60(?:json)?\s*'), '').replaceFirst(RegExp(r'\s*\x60\x60\x60\s*$'), '').trim();
       final decoded = jsonDecode(cleaned);
-      final dynamic quests = decoded is Map<String, dynamic>
-          ? decoded['quests']
-          : decoded;
+      final dynamic quests = decoded is Map<String, dynamic> ? decoded['quests'] : decoded;
       if (quests is! List) throw Exception('Format de quêtes invalide.');
-      final items = quests.whereType<Map>().map((quest) {
+      final generationId = DateTime.now().microsecondsSinceEpoch;
+      final items = <Map<String,String>>[];
+      for (final quest in quests.whereType<Map>()) {
         final title = quest['title']?.toString() ?? 'Mission StudyMind';
         final parsedReward = int.tryParse(quest['reward']?.toString() ?? '') ?? 5;
-        return <String, String>{
-          'id': quest['id']?.toString() ??
-              'quest-${DateTime.now().millisecondsSinceEpoch}-$title',
+        items.add({
+          'id': 'quest-$generationId-${items.length}',
           'title': title,
           'description': quest['description']?.toString() ?? '',
           'course': quest['course']?.toString() ?? 'Toutes matières',
           'type': quest['type']?.toString() ?? 'Principale',
           'reward': parsedReward.clamp(1, 20).toString(),
-        };
-      }).toList();
+        });
+      }
       if (items.length < 2) throw Exception('Le modèle a renvoyé trop peu de quêtes.');
       if (!mounted) return;
       setState(() {
         _aiQuests = items;
         _questCycle = DateTime.now().toUtc().toIso8601String();
         _completedQuestIds = <String>{};
+        _questGenerationWeek = currentWeek;
+        _questGenerationsThisWeek += 1;
       });
       await _saveData();
     } catch (error) {
-      if (mounted) {
-        _messengerKey.currentState!.showSnackBar(
-          SnackBar(content: Text('Quêtes IA : $error')),
-        );
-      }
+      if (mounted) _messengerKey.currentState?.showSnackBar(SnackBar(content: Text('Quêtes IA : $error')));
     } finally {
       if (mounted) setState(() => _questsLoading = false);
     }
   }
 
   Future<void> _ensureAiQuests() async {
-    final date=DateTime.tryParse(_questCycle);
-    if(_aiQuests.isEmpty || date==null || DateTime.now().toUtc().difference(date).inDays>=14) await _generateAiQuests();
+    final date = DateTime.tryParse(_questCycle);
+    final expired = date == null || DateTime.now().toUtc().difference(date).inDays >= 14;
+    if ((_aiQuests.isEmpty || expired) && _questGenerationsThisWeek < 3) {
+      await _generateAiQuests();
+    }
   }
 
-  void _completeAiQuest(String id,int reward) {
-    if(_completedQuestIds.contains(id)) return;
-    setState(()=>_completedQuestIds.add(id));
-    _saveData(); _award(reward,'Quête accomplie');
+  Future<void> _verifyAiQuest(Map<String, String> quest) async {
+    final id = quest['id'] ?? '';
+    if (id.isEmpty || _completedQuestIds.contains(id) || _courses.isEmpty) return;
+    final answerController = TextEditingController();
+    bool checking = false;
+    String feedback = '';
+    await showDialog<void>(
+      context: _navigatorKey.currentContext!,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(quest['title'] ?? 'Quête IA'),
+          content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(quest['description'] ?? ''),
+            const SizedBox(height: 10),
+            Text('Matière : ${quest['course'] ?? 'Cours'}', style: const TextStyle(color: systemBlue)),
+            const SizedBox(height: 12),
+            TextField(controller: answerController, maxLines: 5, enabled: !checking, decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Explique ce que tu as fait ou réponds à la consigne…')),
+            if (feedback.isNotEmpty) ...[const SizedBox(height: 10), Text(feedback, style: const TextStyle(color: Colors.orangeAccent))],
+            if (checking) const Padding(padding: EdgeInsets.only(top: 10), child: LinearProgressIndicator()),
+          ])),
+          actions: [
+            TextButton(onPressed: checking ? null : () => Navigator.pop(dialogContext), child: const Text('Fermer')),
+            FilledButton(
+              onPressed: checking || answerController.text.trim().length < 12 ? null : () async {
+                setDialogState(() { checking = true; feedback = 'KING vérifie ta réalisation…'; });
+                try {
+                  final courseName = (quest['course'] ?? '').toLowerCase();
+                  final matching = _courses.where((c) => c.name.toLowerCase() == courseName && c.content.trim().length >= 20);
+                  final available = _courses.where((c) => c.content.trim().length >= 20).toList();
+                  if (available.isEmpty) throw Exception('Ajoute le contenu du cours avant de faire vérifier cette quête.');
+                  final course = matching.isNotEmpty ? matching.first : available.first;
+                  final verdict = await _generateStudyContent(
+                    task: 'quest_validation',
+                    course: course,
+                    answer: 'TITRE DE LA QUÊTE : ${quest['title']}\nOBJECTIF : ${quest['description']}\nRÉPONSE / PREUVE FOURNIE PAR L’ÉLÈVE : ${answerController.text.trim()}',
+                  );
+                  final valid = RegExp(r'RESULTAT\s*:\s*BONNE', caseSensitive: false).hasMatch(verdict);
+                  if (!valid) {
+                    setDialogState(() { checking = false; feedback = verdict; });
+                    return;
+                  }
+                  if (mounted && !_completedQuestIds.contains(id)) {
+                    setState(() => _completedQuestIds.add(id));
+                    await _saveData();
+                    _award(int.tryParse(quest['reward'] ?? '5') ?? 5, 'Quête accomplie');
+                  }
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                } catch (error) {
+                  setDialogState(() { checking = false; feedback = 'Validation impossible : $error'; });
+                }
+              },
+              child: const Text('Soumettre pour vérification'),
+            ),
+          ],
+        ),
+      ),
+    );
+    answerController.dispose();
   }
 
-  void _completeSecretQuest() {
-    if (_secretQuestDone) return;
-    setState(() => _secretQuestDone = true);
-    _saveData();
-    _award(2, 'Quête secrète RH terminée');
+  Future<void> _openCourseSecretQuest(Course course) async {
+    final alreadyDone = _completedSecretCourseNames.contains(course.name);
+    await _navigatorKey.currentState!.push(MaterialPageRoute(
+      builder: (_) => CourseSecretQuestPage(
+        course: course,
+        alreadyCompleted: alreadyDone,
+        onCompleted: () {
+          if (_completedSecretCourseNames.contains(course.name)) return;
+          setState(() => _completedSecretCourseNames.add(course.name));
+          _saveData();
+          _award(2, 'Quête secrète de ${course.name} terminée');
+        },
+      ),
+    ));
   }
+
+  Future<void> _deleteCourses(List<Course> selected) async {
+    if (selected.isEmpty) return;
+    final names = selected.map((c) => c.name).toSet();
+    setState(() => _courses.removeWhere((c) => names.contains(c.name)));
+    await _saveData();
+    if (mounted) _messengerKey.currentState?.showSnackBar(SnackBar(content: Text('${names.length} matière(s) supprimée(s).')));
+  }
+
 
   void _addCourse() {
     final nameController = TextEditingController();
