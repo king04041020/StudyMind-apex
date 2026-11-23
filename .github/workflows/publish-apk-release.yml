@@ -3,7 +3,7 @@ name: Publish StudyMind APK as public release
 on:
   workflow_run:
     workflows:
-      - Build APK StudyMind Apex
+      - Build APK Kavelynt Apex
     types:
       - completed
 
@@ -19,7 +19,7 @@ jobs:
       - name: Download validated APK artifact
         uses: actions/download-artifact@v5
         with:
-          name: StudyMind-Apex-APK
+          name: Kavelynt-APK
           path: release
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
