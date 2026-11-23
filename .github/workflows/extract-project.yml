@@ -1,4 +1,4 @@
-name: Vérification StudyMind
+name: Vérification Kavelynt
 
 on:
   push:
@@ -24,4 +24,4 @@ jobs:
           test -f lib/main.dart || { echo "ERREUR : lib/main.dart introuvable"; exit 1; }
           test -d android || { echo "ERREUR : dossier android introuvable"; exit 1; }
           test -d ios || { echo "ERREUR : dossier ios introuvable"; exit 1; }
-          echo "Structure Flutter StudyMind vérifiée avec succès."
+          echo "Structure Flutter Kavelynt vérifiée avec succès."
