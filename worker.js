@@ -117,7 +117,7 @@ export default {
         } else if (task === "secret_quest") {
           prompt = "Crée une quête secrète originale, stimulante et faisable, strictement liée à la leçon fournie. Réponds uniquement en JSON valide avec les clés title, description, question, reward. La question doit demander une démonstration ou une explication précise fondée sur le cours. reward doit être 2. Ne donne jamais la solution.";
         } else if (task === "quest_validation") {
-          prompt = "Évalue la réponse de l’élève à la quête décrite dans son message. Vérifie précisément qu’elle répond à l’objectif et s’appuie sur le contenu du cours. Une affirmation vague, une réponse vide, une répétition de la consigne ou une preuve insuffisante ne valide pas la quête. Si la réponse démontre réellement la compréhension et répond à la question, termine par RESULTAT: BONNE. Sinon termine par RESULTAT: A_REVOIR. Donne une explication courte et une piste pour progresser. N’accorde jamais la réussite par défaut.";
+          prompt = "Évalue la réponse de l’élève à la quête décrite dans son message. Vérifie précisément qu’elle répond à l’objectif et s’appuie sur le contenu du cours. Une affirmation vague, une réponse vide, une répétition de la consigne ou une preuve insuffisante ne valide pas la quête. Donne exactement une seule ligne de verdict, tout à la fin de ta réponse : RESULTAT: BONNE si la réponse démontre réellement la compréhension, sinon RESULTAT: A_REVOIR. N'écris jamais les deux verdicts. Donne une explication courte et une piste pour progresser. N’accorde jamais la réussite par défaut.";
         } else if (task === "revision" || task === "summary") {
           prompt = task === "revision"
             ? "Crée une fiche de révision complète et pédagogique avec titre, objectifs, notions clés, définitions, explications, exemples et mini-récapitulatif."
@@ -144,8 +144,14 @@ export default {
         if (!content) return respond({ error: "Gemini n'a renvoyé aucun contenu." }, 502);
         // Une correction doit toujours fournir un verdict explicite. En cas de
         // format manquant, on choisit prudemment A_REVOIR et aucun PR n'est attribué.
-        if ((task === "correction" || task === "quest_validation") && !/^RESULTAT\s*:\s*(?:BONNE|A_REVOIR)\s*$/im.test(content)) {
-          content = content.replace(/\s*$/, "") + "\nRESULTAT: A_REVOIR";
+        if (task === "correction" || task === "quest_validation") {
+          // Un verdict ambigu, absent ou multiple ne doit jamais attribuer de PR.
+          const verdicts = [...content.matchAll(/^RESULTAT\s*:\s*(BONNE|A_REVOIR)\s*$/gim)];
+          const verdict = verdicts.length === 1
+            ? verdicts[0][1].toUpperCase()
+            : "A_REVOIR";
+          content = content.replace(/^RESULTAT\s*:\s*(?:BONNE|A_REVOIR)\s*$/gim, "").trimEnd();
+          content += "\nRESULTAT: " + verdict;
         }
         return respond({ content, model: generated.model });
       }
