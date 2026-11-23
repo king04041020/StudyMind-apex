@@ -15,6 +15,10 @@ on:
       - "ios/**"
       - ".github/workflows/build-ios.yml"
 
+concurrency:
+  group: kavelynt-ios-build
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
