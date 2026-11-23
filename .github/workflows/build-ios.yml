@@ -40,7 +40,9 @@ jobs:
           test -f lib/main.dart
           test -f ios/Podfile
           test -f ios/Runner/Info.plist
+          test -f ios/Runner/GoogleService-Info.plist
           test -f ios/Runner.xcodeproj/project.pbxproj
+          plutil -lint ios/Runner/GoogleService-Info.plist
 
       - name: Installer les dépendances Flutter
         run: flutter pub get
@@ -56,5 +58,6 @@ jobs:
       - name: Vérifier l'application compilée
         run: |
           test -d build/ios/iphoneos/Runner.app
+          test -f build/ios/iphoneos/Runner.app/GoogleService-Info.plist
           /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" build/ios/iphoneos/Runner.app/Info.plist
           echo "KAVELynt_IOS_COMPILE_OK"
