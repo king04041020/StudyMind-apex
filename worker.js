@@ -108,12 +108,16 @@ export default {
         const difficulty = String(body.difficulty || "Moyen").slice(0, 30);
         const source = String(body.text || "").trim().slice(0, 24000);
         const answer = String(body.answer || "").trim().slice(0, 6000);
-        const allowed = ["revision", "exercise", "correction", "summary", "quests"];
+        const allowed = ["revision", "exercise", "correction", "summary", "quests", "secret_quest", "quest_validation"];
         if (!allowed.includes(task)) return respond({ error: "Type de génération inconnu." }, 400);
         if (source.length < 20) return respond({ error: "Ajoute d'abord le contenu du cours (au moins 20 caractères)." }, 400);
         let prompt;
         if (task === "quests") {
           prompt = 'Génère 6 quêtes pédagogiques personnalisées, 3 principales et 3 secondaires, réparties entre les matières du contenu. Réponds uniquement en JSON valide : {"quests":[{"id":"id-stable","title":"...","description":"...","course":"...","type":"Principale ou Secondaire","reward":5}]}. Les quêtes doivent être concrètes, variées et réalisables par un élève. Récompenses entières de 3 à 10 PR.';
+        } else if (task === "secret_quest") {
+          prompt = "Crée une quête secrète originale, stimulante et faisable, strictement liée à la leçon fournie. Réponds uniquement en JSON valide avec les clés title, description, question, reward. La question doit demander une démonstration ou une explication précise fondée sur le cours. reward doit être 2. Ne donne jamais la solution.";
+        } else if (task === "quest_validation") {
+          prompt = "Évalue la réponse de l’élève à la quête décrite dans son message. Vérifie précisément qu’elle répond à l’objectif et s’appuie sur le contenu du cours. Une affirmation vague, une réponse vide, une répétition de la consigne ou une preuve insuffisante ne valide pas la quête. Si la réponse démontre réellement la compréhension et répond à la question, termine par RESULTAT: BONNE. Sinon termine par RESULTAT: A_REVOIR. Donne une explication courte et une piste pour progresser. N’accorde jamais la réussite par défaut.";
         } else if (task === "revision" || task === "summary") {
           prompt = task === "revision"
             ? "Crée une fiche de révision complète et pédagogique avec titre, objectifs, notions clés, définitions, explications, exemples et mini-récapitulatif."
@@ -123,8 +127,8 @@ export default {
         } else {
           prompt = "Corrige la réponse de l'élève à partir du cours. Explique ce qui est juste, ce qui manque ou est faux, puis donne une réponse modèle. Termine par une ligne exactement au format RESULTAT: BONNE ou RESULTAT: A_REVOIR. N'accorde pas automatiquement la réussite.";
         }
-        const userPrompt = task === "correction"
-          ? `Matière: ${course}\nCours:\n${source}\nRéponse de l'élève:\n${answer}\n\nTâche: ${prompt}`
+        const userPrompt = task === "correction" || task === "quest_validation"
+          ? `Matière: ${course}\nCours:\n${source}\nDonnées fournies par l'élève:\n${answer}\n\nTâche: ${prompt}`
           : `Matière: ${course}\nDifficulté: ${difficulty}\nCours:\n${source}\n\nTâche: ${prompt}`;
         const generated = await callGemini({
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
@@ -140,7 +144,7 @@ export default {
         if (!content) return respond({ error: "Gemini n'a renvoyé aucun contenu." }, 502);
         // Une correction doit toujours fournir un verdict explicite. En cas de
         // format manquant, on choisit prudemment A_REVOIR et aucun PR n'est attribué.
-        if (task === "correction" && !/^RESULTAT\\s*:\\s*(?:BONNE|A_REVOIR)\\s*$/im.test(content)) {
+        if ((task === "correction" || task === "quest_validation") && !/^RESULTAT\\s*:\\s*(?:BONNE|A_REVOIR)\\s*$/im.test(content)) {
           content = content.replace(/\\s*$/, "") + "\\nRESULTAT: A_REVOIR";
         }
         return respond({ content, model: generated.model });
