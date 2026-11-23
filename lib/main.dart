@@ -39,7 +39,8 @@ bool _hasPositiveAiVerdict(String output) {
       lastLine.toUpperCase() == 'RESULTAT: BONNE';
 }
 
-// Kavelynt — application éducative personnalisée.\nclass KavelyntApp extends StatefulWidget {
+// Kavelynt — application éducative personnalisée.
+class KavelyntApp extends StatefulWidget {
   const KavelyntApp({super.key});
 
   @override
