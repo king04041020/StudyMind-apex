@@ -144,7 +144,17 @@ jobs:
             -H 'Content-Type: application/json' -H "Authorization: Bearer $FIREBASE_ID_TOKEN" \
             -d "$BODY" 'https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate')"
           CONTENT="$(jq -r '.content // empty' <<< "$RESPONSE")"
-          jq -e '.quests | length >= 2' <<< "$CONTENT" >/dev/null
+          if [ -z "$CONTENT" ]; then
+            echo "Quest generation returned no content:"
+            jq . <<< "$RESPONSE"
+            exit 1
+          fi
+          # /api/generate returns content as a string; quest content itself is JSON.
+          printf '%s' "$CONTENT" | jq -e '
+            (if type == "string" then fromjson else . end)
+            | (.quests | type == "array" and length >= 2)
+            and ([.quests[] | select(.title and .description and .course and (.reward|type=="number"))] | length >= 2)
+          ' >/dev/null
           echo "QUESTS_OK: structured quest list generated."
 
       - name: Delete temporary Firebase test account
