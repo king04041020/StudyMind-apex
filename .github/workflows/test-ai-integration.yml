@@ -85,9 +85,15 @@ jobs:
         run: |
           set -euo pipefail
           BODY="$(jq -n '{task:"exercise",course:"Test de sciences",difficulty:"Facile",text:"La photosynthèse est le processus par lequel les plantes vertes utilisent la lumière, l’eau et le dioxyde de carbone pour produire des sucres et libérer de l’oxygène. La chlorophylle capte l’énergie lumineuse."}')"
-          RESPONSE="$(curl --fail-with-body --silent --show-error --max-time 90 \
+          HTTP_CODE="$(curl --silent --show-error --max-time 100 -o /tmp/worker-exercise.json -w '%{http_code}' \
             -H 'Content-Type: application/json' -H "Authorization: Bearer $FIREBASE_ID_TOKEN" \
             -d "$BODY" 'https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate')"
+          RESPONSE="$(cat /tmp/worker-exercise.json)"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Exercise generation returned HTTP $HTTP_CODE:"
+            jq . <<< "$RESPONSE"
+            exit 1
+          fi
           CONTENT="$(jq -r '.content // empty' <<< "$RESPONSE")"
           test "${#CONTENT}" -gt 80
           echo "EXERCISE_OK: non-empty exercise generated (model: $(jq -r '.model // "unknown"' <<< "$RESPONSE"))."
