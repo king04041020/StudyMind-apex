@@ -23,7 +23,18 @@ const Color panelBlue = Color(0xFF0D2033);
 
 bool _hasPositiveAiVerdict(String output) {
   final matches = RegExp(
-    r'^\s*RESULTAT\s*:\s*(BONNE|A_REVOIR)\s*class StudyMindApp extends StatefulWidget {
+    r'^\s*RESULTAT\s*:\s*(BONNE|A_REVOIR)\s*$',
+    multiLine: true,
+    caseSensitive: false,
+  ).allMatches(output).toList();
+  if (matches.length != 1) return false;
+  final match = matches.single;
+  final lastLine = output.trimRight().split('\n').last.trim();
+  return match.group(1)?.toUpperCase() == 'BONNE' &&
+      lastLine.toUpperCase() == 'RESULTAT: BONNE';
+}
+
+class StudyMindApp extends StatefulWidget {
   const StudyMindApp({super.key});
 
   @override
