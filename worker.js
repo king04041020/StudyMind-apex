@@ -1,4 +1,4 @@
-// StudyMind AI Worker — covered by automated authenticated end-to-end tests.
+// Kavelynt AI Worker — covered by automated authenticated end-to-end tests.
 export default {
   async fetch(request, env) {
     const cors = {
@@ -66,7 +66,7 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { headers: cors });
     const url = new URL(request.url);
     if (url.pathname === "/health" && request.method === "GET") {
-      return respond({ status: "ok", service: "StudyMind AI" });
+      return respond({ status: "ok", service: "Kavelynt AI" });
     }
     if (!["/api/chat", "/api/generate"].includes(url.pathname) || request.method !== "POST") {
       return respond({ error: "Route introuvable" }, 404);
@@ -102,7 +102,7 @@ export default {
           const { success } = await env.CHAT_USER_LIMITER.limit({ key: user.localId });
           if (!success) return respond({ error: "Limite atteinte. Réessaie dans une minute.", code: "RATE_LIMITED" }, 429);
         } catch (limitError) {
-          console.warn("StudyMind limiter indisponible; requête autorisée", limitError);
+          console.warn("Kavelynt limiter indisponible; requête autorisée", limitError);
         }
       }
 
@@ -215,13 +215,13 @@ export default {
             fallbackContent = "La correction automatique est temporairement indisponible. Relis le cours et vérifie que ta réponse contient une définition exacte, une explication et un exemple pertinent. Ta réponse doit être revue lorsque le service IA sera rétabli.\\nRESULTAT: A_REVOIR";
           }
           if (fallbackContent) {
-            console.warn("StudyMind local educational fallback used", task, generated.status, generated.model);
+            console.warn("Kavelynt local educational fallback used", task, generated.status, generated.model);
             return respond({ content: fallbackContent, model: "local-fallback", fallback: true });
           }
         }
         if (!generated.ok) {
           const detail = generatedData.error?.message || generatedData.message || generatedData._raw || "Réponse Gemini invalide.";
-          console.error("StudyMind Gemini generation error", generated.status, generated.model, detail);
+          console.error("Kavelynt Gemini generation error", generated.status, generated.model, detail);
           return respond({ error: `Gemini (HTTP ${generated.status}) : ${String(detail).slice(0, 700)}` }, 502);
         }
         let content = generatedData.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("\n").trim();
@@ -262,7 +262,7 @@ export default {
         "Meilleur ami": "Agis comme un meilleur ami de confiance : chaleureux, naturel, loyal, à l'écoute, encourageant et parfois drôle avec tact. Parle simplement, sans juger ni flatter artificiellement. Aide aussi sérieusement pour les cours. Reste un compagnon d'étude, jamais romantique, et ne prétends pas être humain."
       };
       const styleInstruction = styleInstructions[style] || styleInstructions["Mentor"];
-      const systemInstruction = `${identities[mode]}\nStyle de personnalité : ${styleInstruction}\nTu travailles dans StudyMind, une application d'apprentissage. Explique avec précision, adapte ton niveau à l'élève et privilégie les exemples. Ne prétends pas connaître un cours qui ne t'a pas été fourni.\nMatière : ${course || "Non précisée"}.\nContenu du cours fourni :\n${context || "Aucun document de cours fourni."}`;
+      const systemInstruction = `${identities[mode]}\nStyle de personnalité : ${styleInstruction}\nTu travailles dans Kavelynt, une application d'apprentissage. Explique avec précision, adapte ton niveau à l'élève et privilégie les exemples. Ne prétends pas connaître un cours qui ne t'a pas été fourni.\nMatière : ${course || "Non précisée"}.\nContenu du cours fourni :\n${context || "Aucun document de cours fourni."}`;
       const aiResponse = await callGemini({
         systemInstruction: { parts: [{ text: systemInstruction }] },
         contents: [{ role: "user", parts: [{ text: message }] }],
@@ -271,16 +271,16 @@ export default {
       const result = aiResponse.data;
       if (!aiResponse.ok) {
         const detail = result.error?.message || result.message || result._raw || "Réponse Gemini invalide.";
-        console.error("StudyMind Gemini chat error", aiResponse.status, aiResponse.model, detail);
+        console.error("Kavelynt Gemini chat error", aiResponse.status, aiResponse.model, detail);
         return respond({ error: `Gemini (HTTP ${aiResponse.status}) : ${String(detail).slice(0, 700)}` }, 502);
       }
       const answer = result.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("").trim();
       if (!answer) return respond({ error: "Réponse IA indisponible" }, 502);
       return respond({ answer, assistant: mode, course, model: aiResponse.model });
     } catch (error) {
-      console.error("StudyMind Worker internal error", error);
+      console.error("Kavelynt Worker internal error", error);
       return respond({
-        error: "Erreur interne du service StudyMind",
+        error: "Erreur interne du service Kavelynt",
         code: "WORKER_INTERNAL",
         diagnostic: String(error?.message || error || "Erreur inconnue").slice(0, 500)
       }, 500);
