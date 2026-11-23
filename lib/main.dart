@@ -1496,100 +1496,136 @@ class _ExercisePageState extends State<ExercisePage> {
   }
 }
 
+
 class _QuestsPage extends StatelessWidget {
-  const _QuestsPage({required this.onAward,required this.dailyDone,required this.secretDone,required this.onSecretComplete,required this.quests,required this.completedQuestIds,required this.loading,required this.onRefresh,required this.onCompleteQuest});
-  final void Function(int,String) onAward; final bool dailyDone,secretDone,loading;
-  final VoidCallback onSecretComplete,onRefresh; final List<Map<String,String>> quests; final Set<String> completedQuestIds;
-  final void Function(String,int) onCompleteQuest;
-  @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(18),children:[
-    _pageHeader('JOURNAL DES QUÊTES','Missions adaptées à tes cours • renouvellement tous les 14 jours'),const SizedBox(height:14),
-    _questCard('MISSION QUOTIDIENNE','Échauffement intellectuel',dailyDone?'Mission accomplie.':'Termine correctement un exercice.',dailyDone?'TERMINÉE':'+1 PR',Icons.task_alt,(){if(!dailyDone)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Réussis un exercice pour terminer cette mission.')));}),
-    const SizedBox(height:12),_questCard('QUÊTE SECRÈTE','L’urgence du département RH',secretDone?'Mission accomplie.':'Défi bonus comptable.',secretDone?'TERMINÉE':'+2 PR',Icons.visibility_off_outlined,secretDone?(){}:()=>_showSecret(context,onSecretComplete)),
-    const SizedBox(height:18),Row(children:[const Expanded(child:Text('QUÊTES PERSONNALISÉES PAR IA',style:TextStyle(color:systemBlue,fontWeight:FontWeight.bold))),IconButton(onPressed:loading?null:onRefresh,icon:const Icon(Icons.refresh))]),
-    if(loading)const LinearProgressIndicator(),
-    if(quests.isEmpty&&!loading)const Text('Ajoute le contenu de tes cours pour générer les missions principales et secondaires.'),
-    ...quests.map((q){final id=q['id']??'';final done=completedQuestIds.contains(id);final reward=int.tryParse(q['reward']??'5')??5;return Card(child:ListTile(
-      leading:Icon((q['type']??'').toLowerCase().contains('second')?Icons.bolt:Icons.flag,color:systemBlue),
-      title:Text(q['title']??'Mission'),subtitle:Text('${q['type']??'Quête'} • ${q['course']??''}\n${q['description']??''}'),isThreeLine:true,
-      trailing:done?const Icon(Icons.check_circle,color:Colors.green):TextButton(onPressed:()=>onCompleteQuest(id,reward),child:Text('+$reward PR')),
-    ));}),
-    const SizedBox(height:12),_panel(child:const Text('Les quêtes IA sont sauvegardées sur ton compte. Chaque cycle dure 14 jours et les récompenses ne peuvent être obtenues qu’une seule fois.',style:TextStyle(color:Colors.white70,height:1.4))),
-  ]);
+  const _QuestsPage({
+    required this.dailyDone, required this.quests, required this.completedQuestIds,
+    required this.loading, required this.generationsUsed, required this.onRefresh,
+    required this.onVerifyQuest,
+  });
+  final bool dailyDone, loading;
+  final List<Map<String,String>> quests;
+  final Set<String> completedQuestIds;
+  final int generationsUsed;
+  final VoidCallback onRefresh;
+  final Future<void> Function(Map<String,String>) onVerifyQuest;
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.all(18),
+    children: [
+      _pageHeader('JOURNAL DES QUÊTES', 'Missions adaptées à tes cours • renouvellement tous les 14 jours'),
+      const SizedBox(height:14),
+      _questCard('MISSION QUOTIDIENNE','Échauffement intellectuel',dailyDone?'Mission accomplie.':'Termine correctement un exercice.',dailyDone?'TERMINÉE':'+1 PR',Icons.task_alt,(){if(!dailyDone)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Réussis un exercice pour terminer cette mission.')));}),
+      const SizedBox(height:18),
+      Row(children:[
+        const Expanded(child:Text('QUÊTES PERSONNALISÉES PAR IA',style:TextStyle(color:systemBlue,fontWeight:FontWeight.bold))),
+        IconButton(onPressed:loading||generationsUsed>=3?null:onRefresh,icon:const Icon(Icons.refresh)),
+      ]),
+      Text('Générations cette semaine : $generationsUsed / 3',style:const TextStyle(color:Colors.white60,fontSize:12)),
+      if(loading)const LinearProgressIndicator(),
+      if(quests.isEmpty&&!loading)const Text('Ajoute le contenu de tes cours pour générer des quêtes personnalisées.'),
+      ...quests.map((q){
+        final id=q['id']??'';
+        final done=completedQuestIds.contains(id);
+        return Card(child:ListTile(
+          leading:Icon((q['type']??'').toLowerCase().contains('second')?Icons.bolt:Icons.flag,color:systemBlue),
+          title:Text(q['title']??'Mission'),
+          subtitle:Text('${q['type']??'Quête'} • ${q['course']??''}\n${q['description']??''}'),
+          isThreeLine:true,
+          trailing:done?const Icon(Icons.check_circle,color:Colors.green):TextButton(onPressed:()=>onVerifyQuest(q),child:const Text('Vérifier')),
+        ));
+      }),
+      const SizedBox(height:12),
+      _panel(child:const Text('Chaque quête doit être réellement accomplie puis expliquée. KING vérifie ta réponse avant d’attribuer les PR. Tu peux générer au maximum 3 séries de quêtes IA par semaine. Les récompenses ne sont attribuées qu’une seule fois.',style:TextStyle(color:Colors.white70,height:1.4))),
+    ],
+  );
 }
 
-void _showSecret(BuildContext context, VoidCallback onComplete) {
-  final answerController = TextEditingController();
-  String error = '';
+class CourseSecretQuestPage extends StatefulWidget {
+  const CourseSecretQuestPage({super.key,required this.course,required this.alreadyCompleted,required this.onCompleted});
+  final Course course;
+  final bool alreadyCompleted;
+  final VoidCallback onCompleted;
+  @override
+  State<CourseSecretQuestPage> createState()=>_CourseSecretQuestPageState();
+}
 
-  showDialog(
-    context: context,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setLocal) => AlertDialog(
-        title: const Text('QUÊTE SECRÈTE — DÉPARTEMENT RH'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Le département RH reçoit une facture d’achat de marchandises à crédit. Indique le principe de l’écriture : quel type de compte débiter et quel type de compte créditer ?',
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: answerController,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: 'Explique ta réponse…',
-                ),
-              ),
-              if (error.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  error,
-                  style: const TextStyle(color: Colors.orangeAccent),
-                ),
-              ],
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Plus tard'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final answer = answerController.text
-                  .toLowerCase()
-                  .replaceAll('é', 'e')
-                  .replaceAll('è', 'e')
-                  .replaceAll('ê', 'e')
-                  .replaceAll('à', 'a')
-                  .replaceAll('ç', 'c');
+class _CourseSecretQuestPageState extends State<CourseSecretQuestPage> {
+  static const String _workerUrl='https://studymind-assistant-2026.kayumbagradel05.workers.dev/api/generate';
+  final TextEditingController _answer=TextEditingController();
+  Map<String,dynamic>? _quest;
+  bool _busy=false;
+  bool _done=false;
+  String _feedback='';
 
-              final valid = answer.contains('debit') &&
-                  answer.contains('credit') &&
-                  answer.contains('fournisseur') &&
-                  (answer.contains('achat') || answer.contains('marchandise'));
+  @override
+  void initState(){super.initState();_done=widget.alreadyCompleted;if(!_done)_generate();}
 
-              if (!valid) {
-                setLocal(() {
-                  error =
-                      'Ce n’est pas encore validé. Pense au compte d’achat et au fournisseur.';
-                });
-                return;
-              }
+  Future<String> _callAi(String task,{String answer=''}) async {
+    final user=FirebaseAuth.instance.currentUser;
+    if(user==null)throw Exception('Connexion Firebase requise.');
+    final token=await user.getIdToken(true);
+    final response=await http.post(Uri.parse(_workerUrl),headers:{'Content-Type':'application/json','Authorization':'Bearer $token'},body:jsonEncode({'task':task,'course':widget.course.name,'text':widget.course.content,'answer':answer})).timeout(const Duration(seconds:90));
+    Map<String,dynamic> data;
+    try{final decoded=jsonDecode(response.body);data=decoded is Map<String,dynamic>?decoded:<String,dynamic>{};}catch(_){throw Exception('Réponse IA illisible.');}
+    if(response.statusCode<200||response.statusCode>=300)throw Exception(data['error']?.toString()??'Service IA indisponible.');
+    return data['content']?.toString()??'';
+  }
 
-              Navigator.pop(ctx);
-              onComplete();
-            },
-            child: const Text('Vérifier le dossier'),
-          ),
+  Future<void> _generate() async {
+    if(widget.course.content.trim().length<20){setState(()=>_feedback='Ajoute le contenu du cours pour créer une quête secrète liée à cette leçon.');return;}
+    setState(()=>_busy=true);
+    try{
+      final raw=await _callAi('secret_quest');
+      final cleaned=raw.replaceFirst(RegExp(r'^\s*\x60\x60\x60(?:json)?\s*'),'').replaceFirst(RegExp(r'\s*\x60\x60\x60\s*$'),'').trim();
+      final decoded=jsonDecode(cleaned);
+      if(decoded is! Map)throw Exception('Format de quête invalide.');
+      if(mounted)setState(()=>_quest=Map<String,dynamic>.from(decoded));
+    }catch(error){if(mounted)setState(()=>_feedback='Création impossible : $error');}
+    finally{if(mounted)setState(()=>_busy=false);}
+  }
+
+  Future<void> _verify() async {
+    if(_busy||_answer.text.trim().length<12||_quest==null)return;
+    setState(()=>_busy=true);
+    try{
+      final verdict=await _callAi('quest_validation',answer:'TITRE : ${_quest!['title']}\nOBJECTIF : ${_quest!['description']}\nQUESTION : ${_quest!['question']}\nRÉPONSE DE L’ÉLÈVE : ${_answer.text.trim()}');
+      final valid=RegExp(r'RESULTAT\s*:\s*BONNE',caseSensitive:false).hasMatch(verdict);
+      if(!mounted)return;
+      setState(()=>_feedback=verdict);
+      if(valid&&!_done){setState(()=>_done=true);widget.onCompleted();}
+    }catch(error){if(mounted)setState(()=>_feedback='Vérification impossible : $error');}
+    finally{if(mounted)setState(()=>_busy=false);}
+  }
+
+  @override
+  void dispose(){_answer.dispose();super.dispose();}
+
+  @override
+  Widget build(BuildContext context)=>Scaffold(
+    appBar:AppBar(title:Text('QUÊTE SECRÈTE • ${widget.course.name}')),
+    body:ListView(padding:const EdgeInsets.all(18),children:[
+      _panel(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        const Text('DÉFI PERSONNALISÉ',style:TextStyle(color:systemBlue,fontWeight:FontWeight.bold,letterSpacing:1)),
+        const SizedBox(height:10),
+        if(_busy&&_quest==null)const LinearProgressIndicator(),
+        if(_done)const Text('Cette quête secrète est déjà accomplie. Les PR ont été attribués une seule fois.',style:TextStyle(color:systemBlue)),
+        if(_quest!=null)...[
+          Text(_quest!['title']?.toString()??'Défi secret',style:const TextStyle(fontSize:18,fontWeight:FontWeight.bold)),
+          const SizedBox(height:8),
+          Text(_quest!['description']?.toString()??''),
+          const SizedBox(height:14),
+          Text(_quest!['question']?.toString()??'',style:const TextStyle(height:1.4)),
+          const SizedBox(height:12),
+          TextField(controller:_answer,enabled:!_done&&!_busy,maxLines:5,decoration:const InputDecoration(border:OutlineInputBorder(),hintText:'Rédige ta réponse…')),
+          const SizedBox(height:12),
+          FilledButton.icon(onPressed:_done||_busy?null:_verify,icon:const Icon(Icons.verified_outlined),label:const Text('Vérifier ma réponse')),
         ],
-      ),
-    ),
-  ).then((_) => answerController.dispose());
+        if(_feedback.isNotEmpty)Padding(padding:const EdgeInsets.only(top:12),child:Text(_feedback,style:TextStyle(color:_done?systemBlue:Colors.orangeAccent))),
+      ])),
+    ]),
+  );
 }
 
 class _ProfilePage extends StatelessWidget {
