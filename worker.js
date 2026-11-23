@@ -144,8 +144,8 @@ export default {
         if (!content) return respond({ error: "Gemini n'a renvoyé aucun contenu." }, 502);
         // Une correction doit toujours fournir un verdict explicite. En cas de
         // format manquant, on choisit prudemment A_REVOIR et aucun PR n'est attribué.
-        if ((task === "correction" || task === "quest_validation") && !/^RESULTAT\\s*:\\s*(?:BONNE|A_REVOIR)\\s*$/im.test(content)) {
-          content = content.replace(/\\s*$/, "") + "\\nRESULTAT: A_REVOIR";
+        if ((task === "correction" || task === "quest_validation") && !/^RESULTAT\s*:\s*(?:BONNE|A_REVOIR)\s*$/im.test(content)) {
+          content = content.replace(/\s*$/, "") + "\nRESULTAT: A_REVOIR";
         }
         return respond({ content, model: generated.model });
       }
