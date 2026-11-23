@@ -1,4 +1,4 @@
-StudyMind Apex — structure Flutter/Android
+Kavelynt Apex — structure Flutter/Android
 
 - lib/main.dart : application Flutter
 - pubspec.yaml : dépendances Flutter
