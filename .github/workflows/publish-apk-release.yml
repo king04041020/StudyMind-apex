@@ -1,4 +1,4 @@
-name: Publish StudyMind APK as public release
+name: Publish Kavelynt APK as public release
 
 on:
   workflow_run:
