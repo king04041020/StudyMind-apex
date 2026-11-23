@@ -147,7 +147,9 @@ export default {
         if (task === "correction" || task === "quest_validation") {
           // Un verdict ambigu, absent ou multiple ne doit jamais attribuer de PR.
           const verdicts = [...content.matchAll(/^RESULTAT\s*:\s*(BONNE|A_REVOIR)\s*$/gim)];
-          const verdict = verdicts.length === 1
+          const finalLine = content.trimEnd().split(/\r?\n/).pop()?.trim() || "";
+          const verdict = verdicts.length === 1 &&
+            /^RESULTAT\s*:\s*(BONNE|A_REVOIR)$/i.test(finalLine)
             ? verdicts[0][1].toUpperCase()
             : "A_REVOIR";
           content = content.replace(/^RESULTAT\s*:\s*(?:BONNE|A_REVOIR)\s*$/gim, "").trimEnd();
