@@ -39,8 +39,8 @@
     100000000000000000000011 = { isa = XCConfigurationList; buildConfigurations = (100000000000000000000014, 100000000000000000000015,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
     100000000000000000000012 = { isa = XCBuildConfiguration; buildSettings = { IPHONEOS_DEPLOYMENT_TARGET = 13.0; }; name = Debug; };
     100000000000000000000013 = { isa = XCBuildConfiguration; buildSettings = { IPHONEOS_DEPLOYMENT_TARGET = 13.0; }; name = Release; };
-    100000000000000000000014 = { isa = XCBuildConfiguration; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = com.studymind.app; SWIFT_VERSION = 5.0; INFOPLIST_FILE = Runner/Info.plist; TARGETED_DEVICE_FAMILY = "1,2"; IPHONEOS_DEPLOYMENT_TARGET = 13.0; }; name = Debug; };
-    100000000000000000000015 = { isa = XCBuildConfiguration; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = com.studymind.app; SWIFT_VERSION = 5.0; INFOPLIST_FILE = Runner/Info.plist; TARGETED_DEVICE_FAMILY = "1,2"; IPHONEOS_DEPLOYMENT_TARGET = 13.0; }; name = Release; };
+    100000000000000000000014 = { isa = XCBuildConfiguration; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = com.studymind.app; SWIFT_VERSION = 5.0; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SUPPORTS_MACCATALYST = NO; INFOPLIST_FILE = Runner/Info.plist; TARGETED_DEVICE_FAMILY = "1,2"; IPHONEOS_DEPLOYMENT_TARGET = 13.0; }; name = Debug; };
+    100000000000000000000015 = { isa = XCBuildConfiguration; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = com.studymind.app; SWIFT_VERSION = 5.0; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SUPPORTS_MACCATALYST = NO; INFOPLIST_FILE = Runner/Info.plist; TARGETED_DEVICE_FAMILY = "1,2"; IPHONEOS_DEPLOYMENT_TARGET = 13.0; }; name = Release; };
   };
   rootObject = 100000000000000000000001;
 }
