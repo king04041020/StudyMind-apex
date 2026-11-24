@@ -2,14 +2,6 @@ name: Repair and build Kavelynt iOS
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/ios-build-repair.yml"
-      - "ios/**"
-      - "pubspec.yaml"
-      - "pubspec.lock"
-      - "lib/**"
 
 permissions:
   contents: read
@@ -21,7 +13,7 @@ concurrency:
 jobs:
   build-ios:
     name: Validate and compile Kavelynt iOS
-    runs-on: macos-15
+    runs-on: macos-15-intel
     timeout-minutes: 90
     steps:
       - name: Checkout source
