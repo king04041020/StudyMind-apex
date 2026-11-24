@@ -72,7 +72,7 @@ jobs:
           set -euo pipefail
           test -s ios/Flutter/Generated.xcconfig
           grep -q '^FLUTTER_ROOT=' ios/Flutter/Generated.xcconfig
-          grep -q '^PRODUCT_BUNDLE_IDENTIFIER = com.studymind.app;' ios/Runner.xcodeproj/project.pbxproj
+          grep -Eq 'PRODUCT_BUNDLE_IDENTIFIER = com.studymind.app;' ios/Runner.xcodeproj/project.pbxproj
 
       - name: Install CocoaPods dependencies with retry
         shell: bash
@@ -94,24 +94,24 @@ jobs:
           exit 1
 
       - name: Compile iOS release without signing
-        run: flutter build ios --release --no-codesign -v
+        run: flutter build ios --simulator --release -v
 
       - name: Verify compiled iOS application
         shell: bash
         run: |
           set -euo pipefail
-          APP="build/ios/iphoneos/Runner.app"
+          APP="build/ios/iphonesimulator/Runner.app"
           test -d "$APP"
           test -f "$APP/GoogleService-Info.plist"
           BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist")
           test "$BUNDLE_ID" = "com.studymind.app"
           plutil -lint "$APP/GoogleService-Info.plist"
-          echo "KAVELynt_IOS_COMPILE_OK bundle=$BUNDLE_ID"
+          echo "KAVELynt_IOS_SIMULATOR_COMPILE_OK bundle=$BUNDLE_ID"
 
       - name: Upload unsigned iOS app
         uses: actions/upload-artifact@v4
         with:
-          name: kavelynt-ios-unsigned
-          path: build/ios/iphoneos/Runner.app
+          name: kavelynt-ios-simulator
+          path: build/ios/iphonesimulator/Runner.app
           if-no-files-found: error
           retention-days: 7
