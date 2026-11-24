@@ -25,7 +25,7 @@ permissions:
 jobs:
   build-ios:
     name: Compiler Kavelynt pour iOS (sans signature)
-    runs-on: macos-15
+    runs-on: macos-15-intel
     timeout-minutes: 45
     steps:
       - name: Récupérer le dépôt
