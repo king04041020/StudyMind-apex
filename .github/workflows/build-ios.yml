@@ -51,10 +51,24 @@ jobs:
       - name: Installer les dépendances Flutter
         run: flutter pub get
 
-      - name: Installer les dépendances CocoaPods
+      - name: Installer les dépendances CocoaPods avec reprise
+        shell: bash
         run: |
+          set -euo pipefail
           cd ios
-          pod install --repo-update
+          for attempt in 1 2 3; do
+            echo "CocoaPods installation attempt $attempt/3"
+            if pod install --repo-update; then
+              test -f Pods/Manifest.lock
+              test -f Runner.xcworkspace/contents.xcworkspacedata
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 20))
+            fi
+          done
+          echo "CocoaPods installation failed after 3 attempts"
+          exit 1
 
       - name: Compiler l'application iOS
         run: flutter build ios --release --no-codesign
