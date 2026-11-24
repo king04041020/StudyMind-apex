@@ -70,12 +70,25 @@ jobs:
           echo "CocoaPods installation failed after 3 attempts"
           exit 1
 
-      - name: Compiler l'application iOS
-        run: flutter build ios --release --no-codesign
+      - name: Compiler l'application iOS pour simulateur (sans signature)
+        run: flutter build ios --simulator --release
 
       - name: Vérifier l'application compilée
+        shell: bash
         run: |
-          test -d build/ios/iphoneos/Runner.app
-          test -f build/ios/iphoneos/Runner.app/GoogleService-Info.plist
-          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" build/ios/iphoneos/Runner.app/Info.plist
-          echo "KAVELynt_IOS_COMPILE_OK"
+          set -euo pipefail
+          APP="build/ios/iphonesimulator/Runner.app"
+          test -d "$APP"
+          test -f "$APP/GoogleService-Info.plist"
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist")
+          test "$BUNDLE_ID" = "com.studymind.app"
+          plutil -lint "$APP/GoogleService-Info.plist"
+          echo "KAVELynt_IOS_SIMULATOR_COMPILE_OK bundle=$BUNDLE_ID"
+
+      - name: Publier l'application iOS simulateur
+        uses: actions/upload-artifact@v4
+        with:
+          name: kavelynt-ios-simulator
+          path: build/ios/iphonesimulator/Runner.app
+          if-no-files-found: error
+          retention-days: 7
