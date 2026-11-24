@@ -104,7 +104,7 @@ jobs:
           exit 1
 
       - name: Compile iOS release without signing
-        run: flutter build ios --simulator --release -v
+        run: flutter build ios --simulator --debug -v
 
       - name: Verify compiled iOS application
         shell: bash
