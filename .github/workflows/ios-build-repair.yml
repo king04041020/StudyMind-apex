@@ -72,7 +72,17 @@ jobs:
           set -euo pipefail
           test -s ios/Flutter/Generated.xcconfig
           grep -q '^FLUTTER_ROOT=' ios/Flutter/Generated.xcconfig
-          grep -Eq 'PRODUCT_BUNDLE_IDENTIFIER = com.studymind.app;' ios/Runner.xcodeproj/project.pbxproj
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          project = Path("ios/Runner.xcodeproj/project.pbxproj").read_text()
+          ids = re.findall(r"PRODUCT_BUNDLE_IDENTIFIER\\s*=\\s*([^;]+);", project)
+          assert len(ids) == 2, f"Expected exactly 2 Runner bundle identifiers, found {len(ids)}"
+          assert all(value.strip() == "com.studymind.app" for value in ids), f"Unexpected Xcode bundle identifiers: {ids}"
+          assert project.count("INFOPLIST_FILE = Runner/Info.plist;") == 2, "Runner Info.plist must be set in Debug and Release"
+          assert "GoogleService-Info.plist" in project, "Firebase plist missing from Xcode project"
+          print("STRICT_XCODE_PROJECT_VALIDATION_OK")
+          PY
 
       - name: Install CocoaPods dependencies with retry
         shell: bash
