@@ -82,7 +82,7 @@ jobs:
           exit 1
 
       - name: Compiler l'application iOS pour simulateur (sans signature)
-        run: flutter build ios --simulator --release
+        run: flutter build ios --simulator --debug
 
       - name: Vérifier l'application compilée
         shell: bash
