@@ -26,7 +26,7 @@ jobs:
   build-ios:
     name: Compiler Kavelynt pour iOS (sans signature)
     runs-on: macos-15-intel
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - name: Récupérer le dépôt
         uses: actions/checkout@v4
@@ -37,6 +37,14 @@ jobs:
           flutter-version: "3.38.10"
           channel: stable
           cache: true
+
+      - name: Restaurer le cache des dépendances Flutter
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: kavelynt-pub-macos-flutter-3.38.10-${{ hashFiles('pubspec.yaml') }}
+          restore-keys: |
+            kavelynt-pub-macos-flutter-3.38.10-
 
       - name: Vérifier la structure iOS
         run: |
@@ -62,6 +70,24 @@ jobs:
       - name: Installer les dépendances Flutter
         run: flutter pub get
 
+      - name: Restaurer le cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: kavelynt-pods-macos-${{ hashFiles('pubspec.yaml', 'ios/Podfile') }}
+          restore-keys: |
+            kavelynt-pods-macos-
+
+      - name: Restaurer les fichiers intermédiaires Xcode
+        uses: actions/cache@v4
+        with:
+          path: build/ios
+          key: kavelynt-xcode-macos-xcode15-${{ hashFiles('pubspec.yaml', 'ios/Podfile', 'ios/Runner.xcodeproj/project.pbxproj') }}-${{ github.sha }}
+          restore-keys: |
+            kavelynt-xcode-macos-xcode15-${{ hashFiles('pubspec.yaml', 'ios/Podfile', 'ios/Runner.xcodeproj/project.pbxproj') }}-
+
       - name: Installer les dépendances CocoaPods avec reprise
         shell: bash
         run: |
@@ -69,7 +95,7 @@ jobs:
           cd ios
           for attempt in 1 2 3; do
             echo "CocoaPods installation attempt $attempt/3"
-            if pod install --repo-update; then
+            if pod install; then
               test -f Pods/Manifest.lock
               test -f Runner.xcworkspace/contents.xcworkspacedata
               exit 0
