@@ -17,7 +17,7 @@ permissions:
 jobs:
   build-ios:
     name: Regenerate Flutter iOS project and compile
-    runs-on: macos-14
+    runs-on: macos-latest
     timeout-minutes: 90
     steps:
       - name: Checkout source
