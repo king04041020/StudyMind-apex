@@ -43,9 +43,22 @@ jobs:
         run: |
           set -euo pipefail
           cp ios/Runner/GoogleService-Info.plist "$RUNNER_TEMP/GoogleService-Info.plist"
-          flutter create --platforms=ios --org com.studymind --project-name kavelynt --overwrite .
+          flutter create --platforms=ios --org com.studymind --project-name kavelynt "$RUNNER_TEMP/kavelynt_scaffold"
+          rm -rf ios
+          cp -R "$RUNNER_TEMP/kavelynt_scaffold/ios" ios
           mkdir -p ios/Runner
           cp "$RUNNER_TEMP/GoogleService-Info.plist" ios/Runner/GoogleService-Info.plist
+          python3 - <<'PY'
+          from pathlib import Path
+          podfile = Path("ios/Podfile")
+          source = podfile.read_text()
+          source = source.replace(
+              "File.expand_path(File.join('Flutter', 'Generated.xcconfig'), __FILE__)",
+              "File.expand_path(File.join('Flutter', 'Generated.xcconfig'), __dir__)"
+          )
+          podfile.write_text(source)
+          assert "__dir__" in source, "Podfile path fix was not applied"
+          PY
           python3 - <<'PY'
           from pathlib import Path
           import plistlib
@@ -99,6 +112,11 @@ jobs:
 
       - name: Resolve Flutter packages
         run: flutter pub get
+
+      - name: Verify Flutter iOS generated settings
+        run: |
+          test -s ios/Flutter/Generated.xcconfig
+          grep -q '^FLUTTER_ROOT=' ios/Flutter/Generated.xcconfig
 
       - name: Install CocoaPods dependencies
         shell: bash
