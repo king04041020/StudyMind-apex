@@ -67,6 +67,9 @@ jobs:
           assert "Flutter Build" in project and "xcode_backend.sh\\" in project, "Flutter build shell phase missing"
           assert "Flutter Thin Binary" in project and "embed_and_thin" in project, "Flutter embed/thin shell phase missing"
           assert "GeneratedPluginRegistrant.m" in project, "Generated plugin registrant is not wired into Runner sources"
+          assert project.count("CLANG_ENABLE_MODULES = YES;") == 2, "Clang modules must be enabled for Objective-C plugin imports"
+          assert project.count("SWIFT_OBJC_BRIDGING_HEADER = Runner/Runner-Bridging-Header.h;") == 2, "Swift bridging header must be configured in Debug and Release"
+          assert Path("ios/Runner/Runner-Bridging-Header.h").exists(), "Swift bridging header file is missing"
           assert "AppFrameworkInfo.plist" in project, "Flutter framework metadata plist is not wired into Runner resources"
           print("STRICT_XCODE_PROJECT_VALIDATION_OK")
           PY
