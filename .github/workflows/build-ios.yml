@@ -64,6 +64,10 @@ jobs:
           assert all(value.strip() == "com.studymind.app" for value in ids), f"Unexpected Xcode bundle identifiers: {ids}"
           assert project.count("INFOPLIST_FILE = Runner/Info.plist;") == 2, "Runner Info.plist must be set in Debug and Release"
           assert "GoogleService-Info.plist" in project, "Firebase plist missing from Xcode project"
+          assert "Flutter Build" in project and "xcode_backend.sh\\" in project, "Flutter build shell phase missing"
+          assert "Flutter Thin Binary" in project and "embed_and_thin" in project, "Flutter embed/thin shell phase missing"
+          assert "GeneratedPluginRegistrant.m" in project, "Generated plugin registrant is not wired into Runner sources"
+          assert "AppFrameworkInfo.plist" in project, "Flutter framework metadata plist is not wired into Runner resources"
           print("STRICT_XCODE_PROJECT_VALIDATION_OK")
           PY
 
