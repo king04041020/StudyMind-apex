@@ -27,3 +27,19 @@ Le Worker utilise les secrets `FIREBASE_WEB_API_KEY` et `GEMINI_API_KEY`, ainsi 
 La version Web est compilée via `.github/workflows/build-web.yml` et publiée sur GitHub Pages sous le chemin `/StudyMind-apex/`. Sur iPhone, ouvre le site dans Safari puis utilise **Partager → Sur l’écran d’accueil** pour créer son raccourci en mode application.
 
 **Attention :** l'initialisation Firebase Web nécessite une application Firebase de type Web et ses paramètres `FirebaseOptions`. Le code Firebase natif actuel ne contient pas encore cette configuration Web. Le build Web valide le code Flutter, mais la connexion/les fonctionnalités cloud Web ne seront pleinement utilisables qu'après ajout de cette configuration. Certaines fonctions (photo/caméra, accès fichiers, PDF) doivent également être testées sur Safari iOS.
+
+
+## Configuration Firebase Web (nécessaire pour la connexion)
+
+La compilation Web utilise des variables de configuration GitHub Actions, afin de ne pas coder les paramètres Web directement dans le dépôt. Dans Firebase Console, ajoute une application Web au projet `studymind-4f791`, récupère sa configuration Firebase Web, puis ajoute les secrets suivants dans **Settings → Secrets and variables → Actions → New repository secret** :
+
+- `FIREBASE_WEB_API_KEY`
+- `FIREBASE_WEB_APP_ID`
+- `FIREBASE_WEB_MESSAGING_SENDER_ID`
+- `FIREBASE_WEB_AUTH_DOMAIN` (facultatif)
+- `FIREBASE_WEB_STORAGE_BUCKET` (facultatif)
+- `FIREBASE_WEB_MEASUREMENT_ID` (facultatif)
+
+Les valeurs doivent venir de la configuration de l'application Firebase Web enregistrée pour ce projet. Sans les trois secrets obligatoires, le site Web se compile et affiche une page de configuration plutôt que de lancer une connexion Firebase cassée.
+
+Pour GitHub Pages, vérifier dans **Settings → Pages** que la source est **GitHub Actions**. La publication est ensuite automatisée par `build-web.yml`.
