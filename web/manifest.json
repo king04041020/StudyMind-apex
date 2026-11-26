@@ -1,0 +1,12 @@
+{
+  "name": "Kavelynt — Système éducatif",
+  "short_name": "Kavelynt",
+  "start_url": "/StudyMind-apex/",
+  "scope": "/StudyMind-apex/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#070311",
+  "theme_color": "#070311",
+  "description": "Révise, accomplis des quêtes et progresse dans les ranks.",
+  "icons": []
+}
