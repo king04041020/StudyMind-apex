@@ -1,0 +1,50 @@
+name: Build and deploy Kavelynt Web (PWA)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "lib/**"
+      - "web/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - ".github/workflows/build-web.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: kavelynt-web-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.38.10"
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Build Flutter web for GitHub Pages
+        run: flutter build web --release --base-href /StudyMind-apex/
+      - name: Validate web output
+        run: |
+          set -e
+          test -f build/web/index.html
+          test -f build/web/flutter_bootstrap.js
+          test -f build/web/manifest.json
+          grep -q 'Kavelynt' build/web/index.html
+          echo "KAVELYNT_WEB_BUILD_VALIDATED"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        uses: actions/deploy-pages@v4
