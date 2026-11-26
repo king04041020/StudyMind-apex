@@ -8,5 +8,7 @@
   "background_color": "#070311",
   "theme_color": "#070311",
   "description": "Révise, accomplis des quêtes et progresse dans les ranks.",
-  "icons": []
+  "icons": [
+    { "src": "icons/kavelynt.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
 }
