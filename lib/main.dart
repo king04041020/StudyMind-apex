@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
+import 'file_bytes_stub.dart' if (dart.library.io) 'file_bytes_io.dart';
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import 'package:printing/printing.dart';
@@ -761,7 +761,7 @@ class _KavelyntAppState extends State<KavelyntApp> {
       );
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
-      final bytes = file.bytes ?? (file.path != null ? await File(file.path!).readAsBytes() : null);
+      final bytes = file.bytes ?? (file.path != null ? await readLocalFileBytes(file.path!) : null);
       if (bytes == null) throw Exception('Fichier inaccessible.');
       String extracted;
       final extension = (file.extension ?? '').toLowerCase();
