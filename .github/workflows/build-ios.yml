@@ -145,13 +145,7 @@ jobs:
           xcrun simctl install "$UDID" build/ios/iphonesimulator/Runner.app
           LAUNCH_OUTPUT="$(xcrun simctl launch "$UDID" com.studymind.app)"
           echo "$LAUNCH_OUTPUT"
-          if ! grep -Eq '(^|[[:space:]])[0-9]+        uses: actions/upload-artifact@v4
-        with:
-          name: kavelynt-ios-simulator
-          path: build/ios/iphonesimulator/Runner.app
-          if-no-files-found: error
-          retention-days: 7
- <<< "$LAUNCH_OUTPUT"; then
+          if ! grep -Eq '(^|[[:space:]])[0-9]+$' <<< "$LAUNCH_OUTPUT"; then
             echo "Le simulateur n'a pas confirmé le lancement de l'application."
             exit 1
           fi
