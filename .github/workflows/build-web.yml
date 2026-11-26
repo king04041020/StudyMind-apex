@@ -33,7 +33,15 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
       - name: Build Flutter web for GitHub Pages
-        run: flutter build web --release --base-href /StudyMind-apex/
+        run: |
+          flutter build web --release --base-href /StudyMind-apex/ \
+            --dart-define=FIREBASE_WEB_API_KEY=${{ secrets.FIREBASE_WEB_API_KEY }} \
+            --dart-define=FIREBASE_WEB_APP_ID=${{ secrets.FIREBASE_WEB_APP_ID }} \
+            --dart-define=FIREBASE_WEB_MESSAGING_SENDER_ID=${{ secrets.FIREBASE_WEB_MESSAGING_SENDER_ID }} \
+            --dart-define=FIREBASE_WEB_PROJECT_ID=studymind-4f791 \
+            --dart-define=FIREBASE_WEB_AUTH_DOMAIN=${{ secrets.FIREBASE_WEB_AUTH_DOMAIN }} \
+            --dart-define=FIREBASE_WEB_STORAGE_BUCKET=${{ secrets.FIREBASE_WEB_STORAGE_BUCKET }} \
+            --dart-define=FIREBASE_WEB_MEASUREMENT_ID=${{ secrets.FIREBASE_WEB_MEASUREMENT_ID }}
       - name: Validate web output
         run: |
           set -e
